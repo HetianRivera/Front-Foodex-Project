@@ -6,6 +6,7 @@ import { DashboardHeader } from './DashboardHeader';
 import { DashboardFooter } from './DashboardFooter';
 
 export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewRecipe }) {
+  console.log("Recipes: ", recipes)
   return (
     <div className="min-h-screen bg-slate-50">
       <DashboardHeader user={user} onLogout={onLogout} />
@@ -36,7 +37,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                 <div>
                   <p className="text-lg text-slate-600 mb-1">Tiempo Promedio</p>
                   <p className="text-2xl">
-                    {Math.round(recipes.reduce((sum, r) => sum + r.tiempo, 0) / recipes.length)} min
+                    {(recipes.length === 0) ? 0 : Math.round(recipes.reduce((sum, r) => sum + r.tiempo, 0) / recipes.length)} min
                   </p>
                 </div>
               </div>
