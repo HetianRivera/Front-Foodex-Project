@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Textarea } from './ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
-import { ChefHat, Package, AlertTriangle, Utensils, DollarSign } from 'lucide-react';
+import { ChefHat, Package, AlertTriangle, Utensils } from 'lucide-react';
 import { toast } from 'sonner';
 
 const CATEGORIES = ['Cárnicos','Verduras','Ovolácteos','Abarrotes','Licores','Otros'];
@@ -23,13 +23,10 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   const [porcion, setPorcion] = useState(1);
   const [gramajePorPorcion, setGramajePorPorcion] = useState(0);
   const [tiempo, setTiempo] = useState(0);
-  const [makeup, setMakeup] = useState(3);
-  const [factorMultiplicacion, setFactorMultiplicacion] = useState(3);
-  const [iva, setIva] = useState(19);
-  const [tecnicasBaseInput, setTecnicasBaseInput] = useState('');
-  const [puntosCriticosInput, setPuntosCriticosInput] = useState('');
-  const [utensiliosInput, setUtensiliosInput] = useState('');
-  const [montaje, setMontaje] = useState('');
+  // Campos de costos eliminados
+  // Técnicas: nombre + descripción (simple). Se guardan individualmente.
+  const [tecnicas, setTecnicas] = useState([]);
+  const [savedTecnicas, setSavedTecnicas] = useState([]);
   const [tareaInicio, setTareaInicio] = useState('');
   const [activeTab, setActiveTab] = useState('general');
   const [savedIngredientes, setSavedIngredientes] = useState([]);
@@ -45,7 +42,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   const addIngredient = (categoriaIndex) => {
     setIngredientesCategorias(prev => prev.map((cat,i)=> i===categoriaIndex ? {
       ...cat,
-      ingredientes: [...cat.ingredientes,{ nombre:'', cantidad:0, unidad:'gr', precioUnitario:0 }]
+      ingredientes: [...cat.ingredientes,{ nombre:'', cantidad:0, unidad:'gr' }]
     } : cat));
   };
   const updateIngredient = (categoriaIndex, ingredientIndex, key, value) => {
@@ -116,16 +113,41 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
     })));
   };
 
+  const addTecnica = () => {
+    setTecnicas(prev => [...prev, { nombre: '', descripcion: '', saved: false }]);
+  };
+  const updateTecnica = (index, key, value) => {
+    setTecnicas(prev => prev.map((t,i)=> i===index ? { ...t, [key]: value } : t));
+  };
+  const removeTecnica = (index) => {
+    setTecnicas(prev => prev.filter((_,i)=> i!==index));
+  };
+  const saveTecnica = (index) => {
+    setTecnicas(prev => prev.map((t,i)=> i===index ? { ...t, saved: true } : t));
+    setSavedTecnicas(prev => {
+      const t = tecnicas[index];
+      if (!t.nombre.trim() || !t.descripcion.trim()) return prev;
+      const existingIdx = prev.findIndex(x=>x.nombre.trim().toLowerCase()===t.nombre.trim().toLowerCase());
+      const newEntry = { nombre: t.nombre.trim(), descripcion: t.descripcion.trim() };
+      if (existingIdx>=0) {
+        const copy = [...prev];
+        copy[existingIdx] = newEntry;
+        return copy;
+      }
+      return [...prev, newEntry];
+    });
+    toast.success('Técnica guardada');
+  };
+
   const handleSave = () => {
     if (!codigo || !nombre) return;
     const ingredientesFinal = ingredientesCategorias.map(cat => ({
       categoria: cat.categoria,
-      ingredientes: cat.ingredientes.map(ing => {
-        const cantidadNum = Number(ing.cantidad)||0;
-        const precioUnit = Number(ing.precioUnitario)||0;
-        const precioTotal = +(cantidadNum * precioUnit).toFixed(2);
-        return { ...ing, cantidad: cantidadNum, precioUnitario: precioUnit, precioTotal };
-      })
+      ingredientes: cat.ingredientes.map(ing => ({
+        nombre: ing.nombre,
+        cantidad: Number(ing.cantidad)||0,
+        unidad: ing.unidad
+      }))
     }));
     const receta = {
       id: Date.now().toString(),
@@ -147,13 +169,12 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         ingredientesUsados: p.ingredientesUsados.map(i=> ({ ...i, cantidad: Number(i.cantidad)||0 })),
         tiempoEstimado: Number(p.tiempoEstimado)||0
       })),
-      tecnicasBase: tecnicasBaseInput.split('\n').map(t=>t.trim()).filter(Boolean),
-      puntosCriticos: puntosCriticosInput.split('\n').map(t=>t.trim()).filter(Boolean),
-      utensilios: utensiliosInput.split('\n').map(t=>t.trim()).filter(Boolean),
-      montaje,
-      makeup: Number(makeup)||0,
-      factorMultiplicacion: Number(factorMultiplicacion)||1,
-      iva: Number(iva)||0,
+      tecnicas: savedTecnicas.filter(t=> t.nombre.trim()),
+      // Legacy derivado (ahora sólo nombres, sin listas)
+      tecnicasBase: savedTecnicas.map(t=>t.nombre.trim()).filter(Boolean),
+      puntosCriticos: [],
+      utensilios: [],
+      // Costos removidos
       gramajePorPorcion: Number(gramajePorPorcion)||0
     };
     onSave(receta);
@@ -167,10 +188,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       ['Categoría', categoria],
       ['Porciones', String(porcion)],
       ['Gramaje por porción (g)', String(gramajePorPorcion)],
-      ['Tiempo (min)', String(tiempo)],
-      ['Make Up %', String(makeup)],
-      ['Factor Multiplicación', String(factorMultiplicacion)],
-      ['IVA %', String(iva)]
+      ['Tiempo (min)', String(tiempo)]
     ];
     const tableMeta = new Table({
       rows: metaRows.map(r => new TableRow({
@@ -185,22 +203,28 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         children: [
           new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: cat.categoria, bold: true })] })] }),
           new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Cantidad', bold: true })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Unidad', bold: true })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Precio Unit', bold: true })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Total', bold: true })] })] }),
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Unidad', bold: true })] })] })
         ]
       });
       const rows = cat.ingredientes.map(ing => new TableRow({
         children: [
           new TableCell({ children: [new Paragraph(ing.nombre)] }),
           new TableCell({ children: [new Paragraph(String(ing.cantidad))] }),
-          new TableCell({ children: [new Paragraph(ing.unidad)] }),
-          new TableCell({ children: [new Paragraph(String(ing.precioUnitario||0))] }),
-          new TableCell({ children: [new Paragraph(String(((ing.cantidad||0)*(ing.precioUnitario||0)).toFixed(2)))] }),
+          new TableCell({ children: [new Paragraph(ing.unidad)] })
         ]
       }));
       return new Table({ rows: [header, ...rows] });
     });
+    const tecnicasBlocks = [];
+    if (savedTecnicas.length) {
+      tecnicasBlocks.push(new Paragraph({ children: [new TextRun({ text: 'Técnicas', bold: true })] }));
+      savedTecnicas.forEach((t, idx) => {
+        tecnicasBlocks.push(new Paragraph({ children: [new TextRun({ text: `${idx+1}. ${t.nombre}`, bold: true })] }));
+        tecnicasBlocks.push(new Paragraph(t.descripcion));
+        tecnicasBlocks.push(new Paragraph(''));
+      });
+    }
+
     const doc = new Document({
       sections: [
         {
@@ -222,19 +246,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
             ...ingredientesTables,
             new Paragraph(''),
             new Paragraph({ children: [new TextRun({ text: 'Procesos', bold: true })] }),
-            ...procesos.map(p => new Paragraph(`${p.etapa} - ${p.titulo}: ${p.descripcion}`)),
-            new Paragraph(''),
-            new Paragraph({ children: [new TextRun({ text: 'Montaje', bold: true })] }),
-            new Paragraph(montaje || ''),
-            new Paragraph(''),
-            new Paragraph({ children: [new TextRun({ text: 'Técnicas Base', bold: true })] }),
-            ...tecnicasBaseInput.split('\n').filter(Boolean).map(t => new Paragraph('- ' + t)),
-            new Paragraph(''),
-            new Paragraph({ children: [new TextRun({ text: 'Puntos Críticos', bold: true })] }),
-            ...puntosCriticosInput.split('\n').filter(Boolean).map(t => new Paragraph('- ' + t)),
-            new Paragraph(''),
-            new Paragraph({ children: [new TextRun({ text: 'Utensilios', bold: true })] }),
-            ...utensiliosInput.split('\n').filter(Boolean).map(t => new Paragraph('- ' + t)),
+            ...tecnicasBlocks,
           ]
         }
       ]
@@ -260,7 +272,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       </DashboardHeader>
       <div className="max-w-7xl mx-auto space-y-6 p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5 h-auto gap-2 bg-slate-200 p-2">
+          <TabsList className="grid w-full grid-cols-4 h-auto gap-2 bg-slate-200 p-2">
             <TabsTrigger value="general" className="text-lg py-5 data-[state=active]:bg-white">
               <ChefHat className="w-6 h-6 mr-2" />
               General
@@ -275,11 +287,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
             </TabsTrigger>
             <TabsTrigger value="tecnicas" className="text-lg py-5 data-[state=active]:bg-white">
               <AlertTriangle className="w-6 h-6 mr-2" />
-              Técnicas/PCC
-            </TabsTrigger>
-            <TabsTrigger value="montaje" className="text-lg py-5 data-[state=active]:bg-white">
-              <DollarSign className="w-6 h-6 mr-2" />
-              Montaje/Costos
+              Técnicas
             </TabsTrigger>
           </TabsList>
           <TabsContent value="general" className="space-y-6">
@@ -310,18 +318,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                   <label className="block mb-1">Gramaje por porción (g)</label>
                   <Input type="number" value={gramajePorPorcion} min={0} onChange={e=>setGramajePorPorcion(e.target.value)} />
                 </div>
-                <div>
-                  <label className="block mb-1">Make Up %</label>
-                  <Input type="number" value={makeup} min={0} onChange={e=>setMakeup(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block mb-1">Factor Multiplicación</label>
-                  <Input type="number" value={factorMultiplicacion} min={1} step={0.1} onChange={e=>setFactorMultiplicacion(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block mb-1">IVA %</label>
-                  <Input type="number" value={iva} min={0} onChange={e=>setIva(e.target.value)} />
-                </div>
+                {/* Campos de costos eliminados */}
                 <div className="col-span-2">
                   <label className="block mb-1">Tarea de Inicio (M.e.P.)</label>
                   <Textarea rows={3} value={tareaInicio} onChange={e=>setTareaInicio(e.target.value)} />
@@ -379,13 +376,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                               {UNIDADES.map(u=> <option key={u} value={u}>{u}</option>)}
                             </select>
                           </div>
-                          <div>
-                            <label className="block mb-1">Precio Unitario</label>
-                            <Input type="number" min={0} value={ing.precioUnitario} onChange={e=>updateIngredient(ci,ii,'precioUnitario',e.target.value)} />
-                          </div>
-                          <div className="flex flex-col justify-end">
-                            <p className="text-sm text-slate-600">Total: {((Number(ing.cantidad)||0)*(Number(ing.precioUnitario)||0)).toFixed(2)}</p>
-                          </div>
+                          {/* Campos de precio eliminados */}
                           <div className="flex gap-2 justify-end">
                             <Button variant="destructive" size="sm" onClick={()=>removeIngredient(ci,ii)}>Eliminar</Button>
                           </div>
@@ -471,53 +462,35 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
           </TabsContent>
           <TabsContent value="tecnicas" className="space-y-6">
             <Card>
-              <CardHeader><CardTitle>Técnicas de Base</CardTitle></CardHeader>
-              <CardContent>
-                <Textarea rows={6} value={tecnicasBaseInput} placeholder="Una por línea" onChange={e=>setTecnicasBaseInput(e.target.value)} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Puntos Críticos de Control (PCC)</CardTitle></CardHeader>
-              <CardContent>
-                <Textarea rows={6} value={puntosCriticosInput} placeholder="Uno por línea" onChange={e=>setPuntosCriticosInput(e.target.value)} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Utensilios Necesarios</CardTitle></CardHeader>
-              <CardContent>
-                <Textarea rows={4} value={utensiliosInput} placeholder="Uno por línea" onChange={e=>setUtensiliosInput(e.target.value)} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="montaje" className="space-y-6">
-            <Card>
-              <CardHeader><CardTitle>Montaje Final</CardTitle></CardHeader>
-              <CardContent>
-                <Textarea rows={5} value={montaje} onChange={e=>setMontaje(e.target.value)} placeholder="Descripción del montaje final" />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Resumen Costos (estimado)</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
-                {(() => {
-                  const totalMateriaPrima = ingredientesCategorias.reduce((sum,cat)=> sum + cat.ingredientes.reduce((s,ing)=> s + (Number(ing.cantidad)||0)*(Number(ing.precioUnitario)||0),0),0);
-                  const costoMakeup = totalMateriaPrima * (Number(makeup)||0)/100;
-                  const costoNeto = totalMateriaPrima + costoMakeup;
-                  const precioVentaNeta = costoNeto * (Number(factorMultiplicacion)||1);
-                  const ivaValor = precioVentaNeta * (Number(iva)||0)/100;
-                  const precioFinal = precioVentaNeta + ivaValor;
-                  return (
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <p>Materia Prima: <strong>{totalMateriaPrima.toFixed(2)}</strong></p>
-                      <p>Make Up: <strong>{costoMakeup.toFixed(2)}</strong></p>
-                      <p>Costo Neto: <strong>{costoNeto.toFixed(2)}</strong></p>
-                      <p>Venta Neta: <strong>{precioVentaNeta.toFixed(2)}</strong></p>
-                      <p>IVA: <strong>{ivaValor.toFixed(2)}</strong></p>
-                      <p>Precio Final: <strong>{precioFinal.toFixed(2)}</strong></p>
-                      <p>Precio por Porción: <strong>{(porcion>0? (precioFinal/porcion).toFixed(2):'0')}</strong></p>
+              <CardHeader className="flex items-center justify-between"><CardTitle>Técnicas</CardTitle>
+                <Button size="sm" variant="secondary" onClick={addTecnica}>Agregar Técnica</Button>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {tecnicas.map((t, idx)=>(
+                  <div key={idx} className="space-y-4 p-4 rounded border">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block mb-1">Nombre de la Técnica</label>
+                        <Input value={t.nombre} onChange={e=>updateTecnica(idx,'nombre',e.target.value)} />
+                      </div>
+                      <div className="flex items-end justify-end gap-2">
+                        <Button variant="secondary" size="sm" onClick={()=>saveTecnica(idx)} disabled={!t.nombre.trim() || !t.descripcion.trim() || t.saved}>Guardar</Button>
+                        <Button variant="destructive" size="sm" onClick={()=>removeTecnica(idx)}>Eliminar</Button>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block mb-1">Descripción</label>
+                        <Textarea rows={4} value={t.descripcion} onChange={e=>updateTecnica(idx,'descripcion',e.target.value)} />
+                        {t.saved && <p className="text-xs text-green-600 mt-1">Guardada</p>}
+                      </div>
                     </div>
-                  );
-                })()}
+                  </div>
+                ))}
+                {tecnicas.length===0 && <p className="text-sm text-slate-500">No hay técnicas agregadas.</p>}
+                {savedTecnicas.length>0 && (
+                  <div className="pt-4 border-t">
+                    <p className="text-sm text-slate-600">Técnicas guardadas: {savedTecnicas.map(t=>t.nombre).join(', ')}</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
