@@ -6,7 +6,6 @@ import { DashboardHeader } from './DashboardHeader';
 import { DashboardFooter } from './DashboardFooter';
 
 export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewRecipe }) {
-  console.log("Recipes: ", recipes)
   return (
     <div className="min-h-screen bg-slate-50">
       <DashboardHeader user={user} onLogout={onLogout} />

@@ -52,6 +52,17 @@ function InlineLogo() {
 }
 
 export function DashboardHeader({ user, onLogout, children }) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  let semestreText;
+  if (month >= 1 && month <= 2) {
+    semestreText = `Período Vacaciones ${year}`;
+  } else if (month >= 3 && month <= 6) {
+    semestreText = `Semestre Otoño ${year}`;
+  } else if (month >= 7 && month <= 12) {
+    semestreText = `Semestre Primavera ${year}`;
+  }
   return (
     <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-8 shadow-lg">
       <div className="container mx-auto max-w-6xl">
@@ -62,7 +73,7 @@ export function DashboardHeader({ user, onLogout, children }) {
             </div>
             <div>
               <h1 className="text-3xl">FOODEX - Taller Gastronómico</h1>
-              <p className="text-xl text-slate-300">Semestre 2025</p>
+              <p className="text-xl text-slate-300">{semestreText}</p>
             </div>
           </div>
           <div className="flex items-center gap-6">
