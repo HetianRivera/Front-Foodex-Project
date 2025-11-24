@@ -29,6 +29,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   const [activeTab, setActiveTab] = useState('general');
   const [savedIngredientes, setSavedIngredientes] = useState([]);
   const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
 
 
   const [ingredientesCategorias, setIngredientesCategorias] = useState(
@@ -38,6 +39,67 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   const [procesos, setProcesos] = useState(
     STAGES.map(etapa => ({ etapa, titulo: '', descripcion: '', tiempoEstimado: 0, ingredientesUsados: [] }))
   );
+
+  //Para validar que hay en cada campo
+  const validateField = (fieldName, value) => {
+    let error = '';
+    switch(fieldName) {
+      case 'codigo':
+        if (!value || !value.toString().trim()) error = 'El código es obligatorio';
+        break;
+      case 'nombre':
+        if (!value || !value.toString().trim()) error = 'El nombre es obligatorio';
+        break;
+      case 'categoria':
+        if (!value || !value.toString().trim()) error = 'La categoría es obligatoria';
+        break;
+      case 'tiempo':
+        if (!value || value <= 0) error = 'El tiempo es obligatorio';
+        break;
+      case 'tareaInicio':
+        if (!value || !value.toString().trim()) error = 'La tarea de inicio es obligatoria';
+        break;
+      case 'tecnicasBaseInput':
+        if (!value || !value.toString().trim()) error = 'Debes ingresar al menos una técnica de base';
+        break;
+      case 'puntosCriticosInput':
+        if (!value || !value.toString().trim()) error = 'Debes ingresar al menos un punto crítico de control';
+        break;
+      case 'utensiliosInput':
+        if (!value || !value.toString().trim()) error = 'Debes ingresar al menos un utensilio necesario';
+        break;
+      case 'montaje':
+        if (!value || !value.toString().trim()) error = 'Debes ingresar el montaje final';
+        break;
+    }
+    return error;
+  };
+
+  //Para ver cuando el usuario sale del input
+  const handleBlur = (fieldName, value) => {
+    setTouched(prev => ({ ...prev, [fieldName]: true }));
+    
+    const error = validateField(fieldName, value);
+    setErrors(prev => ({
+      ...prev,
+      [fieldName]: error
+    }));
+  };
+
+
+  //Para borrar errores cuando el campo ya tiene un valor y revalidar en tiempo real
+  const handleChange = (fieldName, value, setter) => {
+    setter(value);
+
+    if (touched[fieldName]) {
+      const error = validateField(fieldName, value);
+      setErrors(prev => ({
+        ...prev,
+        [fieldName]: error
+      }));
+    }
+  };
+
 
   const addIngredient = (categoriaIndex) => {
     setIngredientesCategorias(prev => prev.map((cat,i)=> i===categoriaIndex ? {
@@ -114,6 +176,15 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   };
 
   const handleSave = () => {
+    const allFields = [
+      'codigo', 'nombre', 'categoria', 'tiempo', 'tareaInicio',
+      'tecnicasBaseInput', 'puntosCriticosInput', 'utensiliosInput', 'montaje'
+    ];
+    
+    const newTouched = {};
+    allFields.forEach(field => newTouched[field] = true);
+    setTouched(newTouched);
+
     const newErrors = {};
     if (!codigo) newErrors.codigo = 'El código es obligatorio';
     if (!nombre) newErrors.nombre = 'El nombre es obligatorio';
@@ -283,24 +354,23 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
               <CardContent className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block mb-1">Código</label>
-                  <Input value={codigo} onChange={e=>setCodigo(e.target.value)} required />
-                  {errors.codigo && <span className="text-red-500 text-sm">{errors.codigo}</span>}
+                  <Input value={codigo} onChange={e => handleChange('codigo', e.target.value, setCodigo)}onBlur={e => handleBlur('codigo', e.target.value)}required/>
+                  {touched.codigo && errors.codigo && (<span className="text-red-500 text-sm">{errors.codigo}</span>)}
                 </div>
                 <div>
                   <label className="block mb-1">Nombre</label>
-                  <Input value={nombre} onChange={e=>setNombre(e.target.value)} required/>
-                  {errors.nombre && <span className="text-red-500 text-sm">{errors.nombre}</span>}
+                  <Input value={nombre} onChange={e => handleChange('nombre', e.target.value, setNombre)}onBlur={e => handleBlur('nombre', e.target.value)}required/>
+                  {touched.nombre && errors.nombre && (<span className="text-red-500 text-sm">{errors.nombre}</span>)}
                 </div>
                 <div>
                   <label className="block mb-1">Categoría</label>
-                  <Input value={categoria} onChange={e=>setCategoria(e.target.value)} required/>
-                  {errors.categoria && <span className="text-red-500 text-sm">{errors.categoria}</span>}
+                  <Input value={categoria} onChange={e => handleChange('categoria', e.target.value, setCategoria)}onBlur={e => handleBlur('categoria', e.target.value)}required/>
+                  {touched.categoria && errors.categoria && (<span className="text-red-500 text-sm">{errors.categoria}</span>)}
                 </div>
                 <div>
                   <label className="block mb-1">Tiempo (min)</label>
-                  <Input type="number" value={tiempo} min={0} onChange={e=>setTiempo(e.target.value)} required/>
-                  {errors.tiempo && <span className="text-red-500 text-sm">{errors.tiempo}</span>}
-                </div>
+                  <Input type="number" value={tiempo} min={0} onChange={e => handleChange('tiempo', e.target.value, setTiempo)}onBlur={e => handleBlur('tiempo', e.target.value)}required/>
+                  {touched.tiempo && errors.tiempo && (<span className="text-red-500 text-sm">{errors.tiempo}</span>)}                </div>
                 <div>
                   <label className="block mb-1">Porciones</label>
                   <Input type="number" value={porcion} min={1} onChange={e=>setPorcion(e.target.value)} />
@@ -311,8 +381,8 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                 </div>
                 <div className="col-span-3">
                   <label className="block mb-1">Tarea de Inicio (M.e.P.)</label>
-                  <Textarea rows={3} value={tareaInicio} onChange={e=>setTareaInicio(e.target.value)} required/>
-                    {errors.tareaInicio && <span className="text-red-500 text-sm">{errors.tareaInicio}</span>}
+                  <Textarea rows={3} value={tareaInicio} onChange={e => handleChange('tareaInicio', e.target.value, setTareaInicio)}onBlur={e => handleBlur('tareaInicio', e.target.value)}required/>
+                  {touched.tareaInicio && errors.tareaInicio && (<span className="text-red-500 text-sm">{errors.tareaInicio}</span>)}
                 </div>
                 <div className="col-span-2">
                   <label className="block mb-2">Imagen del Plato (opcional)</label>
@@ -337,12 +407,16 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                 </div>
               </CardHeader>
               <CardContent className="space-y-8">
-                {errors.ingredientes && (<span className="text-red-500 text-sm block mb-2">{errors.ingredientes}</span>)}
+                {errors.ingredientes && (
+                  <span className="text-red-500 text-sm block mb-2">{errors.ingredientes}</span>
+                )}
                 {ingredientesCategorias.map((cat, ci) => (
                   <div key={ci} className="space-y-4">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xl font-semibold">{cat.categoria}</h4>
-                      <Button size="sm" variant="secondary" onClick={()=>addIngredient(ci)}>Agregar</Button>
+                      <Button size="sm" variant="secondary" onClick={()=>addIngredient(ci)}>
+                        Agregar
+                      </Button>
                     </div>
                     <div className="space-y-3">
                       {cat.ingredientes.map((ing, ii) => (
@@ -362,67 +436,71 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                             </select>
                           </div>
                           <div className="flex gap-2 justify-end">
-                            <Button variant="destructive" size="sm" onClick={()=>removeIngredient(ci,ii)}>Eliminar</Button>
+                            <Button variant="destructive" size="sm" onClick={()=>removeIngredient(ci,ii)}>
+                              Eliminar
+                            </Button>
                           </div>
                         </div>
                       ))}
-                      {cat.ingredientes.length===0 && <p className="text-sm text-slate-500">Sin ingredientes en esta categoría.</p>}
+                      {cat.ingredientes.length===0 && (
+                        <p className="text-sm text-slate-500">Sin ingredientes en esta categoría.</p>
+                      )}
                     </div>
                   </div>
                 ))}
               </CardContent>
             </Card>
           </TabsContent>
+
           <TabsContent value="proceso" className="space-y-6">
             <Card>
               <CardHeader><CardTitle>Etapas A - E</CardTitle></CardHeader>
               <CardContent className="space-y-8">
-                {errors.procesos && (
-  <span className="text-red-500 text-sm block mb-2">{errors.procesos}</span>
-)}
+                {errors.procesos && (<span className="text-red-500 text-sm block mb-2">{errors.procesos}</span>)}
                 {procesos.map((p, pi)=>(
                   <div key={p.etapa} className="space-y-4 p-4 rounded border">
                     <h4 className="text-lg font-semibold">Etapa {p.etapa}</h4>
                     <div className="grid grid-cols-3 gap-4">
                       <div className="col-span-1">
                         <label className="block mb-1">Título</label>
-                        <Input value={p.titulo} onChange={e=>setProcesos(prev=> prev.map((x,i)=> i===pi? {...x,titulo:e.target.value}:x))} />
+                        <Input value={p.titulo} onChange={e=>setProcesos(prev=> 
+                            prev.map((x,i)=> i===pi? {...x,titulo:e.target.value}:x))} />
                       </div>
                       <div className="col-span-1">
                         <label className="block mb-1">Tiempo Estimado (min)</label>
-                        <Input type="number" min={0} value={p.tiempoEstimado} onChange={e=>setProcesos(prev=> prev.map((x,i)=> i===pi? {...x,tiempoEstimado:e.target.value}:x))} />
+                        <Input type="number" min={0} value={p.tiempoEstimado} onChange={e=>setProcesos(prev=> 
+                            prev.map((x,i)=> i===pi? {...x,tiempoEstimado:e.target.value}:x))} />
                       </div>
                       <div className="col-span-3">
                         <label className="block mb-1">Descripción</label>
-                        <Textarea rows={3} value={p.descripcion} onChange={e=>setProcesos(prev=> prev.map((x,i)=> i===pi? {...x,descripcion:e.target.value}:x))} />
+                        <Textarea rows={3} value={p.descripcion} onChange={e=>setProcesos(prev=> 
+                            prev.map((x,i)=> i===pi? {...x,descripcion:e.target.value}:x))} />
                       </div>
                       <div className="col-span-3 space-y-3">
                         <div className="flex items-center justify-between">
                           <p className="font-medium">Ingredientes usados</p>
-                          <Button size="sm" variant="secondary" onClick={()=>addIngredienteEtapa(pi)}>Agregar</Button>
+                          <Button size="sm" variant="secondary" onClick={()=>addIngredienteEtapa(pi)}>
+                            Agregar
+                          </Button>
                         </div>
                         {p.ingredientesUsados.map((iu, ii)=>(
                           <div key={ii} className="grid grid-cols-6 gap-2 items-end">
                             <div className="col-span-2">
                               <label className="block mb-1">Ingrediente</label>
                               {savedIngredientes.length > 0 ? (
-                                <select 
-                                  className="w-full border rounded px-2 py-2" 
-                                  value={iu.nombre} 
-                                  onChange={e=>{
+                                <select className="w-full border rounded px-2 py-2" value={iu.nombre} onChange={e=>{
                                     const selected = savedIngredientes.find(ing=>ing.nombre===e.target.value);
                                     if(selected){
                                       updateIngredienteEtapa(pi,ii,'nombre',selected.nombre);
                                       updateIngredienteEtapa(pi,ii,'unidad',selected.unidad);
-                                    }
-                                  }}
-                                >
+                                    }}}>
                                   <option value="">Seleccionar...</option>
-                                  {savedIngredientes.map((ing,idx)=> <option key={idx} value={ing.nombre}>{ing.nombre} ({ing.categoria})</option>)}
+                                  {savedIngredientes.map((ing,idx)=> 
+                                    <option key={idx} value={ing.nombre}>{ing.nombre} ({ing.categoria})</option>
+                                  )}
                                 </select>
-                              ) : (
-                                <Input value={iu.nombre} onChange={e=>updateIngredienteEtapa(pi,ii,'nombre',e.target.value)} placeholder="Primero guarda ingredientes" />
-                              )}
+                                ) : (
+                                <Input value={iu.nombre} onChange={e=>updateIngredienteEtapa(pi,ii,'nombre',e.target.value)} placeholder="Primero guarda ingredientes" />)}
                             </div>
                             <div>
                               <label className="block mb-1">Cantidad</label>
@@ -435,11 +513,13 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                               </select>
                             </div>
                             <div className="flex gap-2">
-                              <Button variant="destructive" size="sm" onClick={()=>removeIngredienteEtapa(pi,ii)}>Eliminar</Button>
+                              <Button variant="destructive" size="sm" onClick={()=>removeIngredienteEtapa(pi,ii)}>
+                                Eliminar
+                              </Button>
                             </div>
                           </div>
                         ))}
-                        {p.ingredientesUsados.length===0 && <p className="text-sm text-slate-500">Sin ingredientes en esta etapa.</p>}
+                        {p.ingredientesUsados.length===0 && (<p className="text-sm text-slate-500">Sin ingredientes en esta etapa.</p>)}
                       </div>
                     </div>
                   </div>
@@ -447,35 +527,37 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
               </CardContent>
             </Card>
           </TabsContent>
+
           <TabsContent value="tecnicas" className="space-y-6">
             <Card>
               <CardHeader><CardTitle>Técnicas de Base</CardTitle></CardHeader>
               <CardContent>
-                <Textarea rows={6} value={tecnicasBaseInput} placeholder="Una por línea" onChange={e=>setTecnicasBaseInput(e.target.value)} />
-                {errors.tecnicasBaseInput && <span className="text-red-500 text-sm block mt-2">{errors.tecnicasBaseInput}</span>}
+                <Textarea rows={6} value={tecnicasBaseInput} placeholder="Una por línea" onChange={e => handleChange('tecnicasBaseInput', e.target.value, setTecnicasBaseInput)}onBlur={e => handleBlur('tecnicasBaseInput', e.target.value)}/>
+                {touched.tecnicasBaseInput && errors.tecnicasBaseInput && (<span className="text-red-500 text-sm block mt-2">{errors.tecnicasBaseInput}</span>)}
               </CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle>Puntos Críticos de Control (PCC)</CardTitle></CardHeader>
               <CardContent>
-                <Textarea rows={6} value={puntosCriticosInput} placeholder="Uno por línea" onChange={e=>setPuntosCriticosInput(e.target.value)} />
-                {errors.puntosCriticosInput && <span className="text-red-500 text-sm block mt-2">{errors.puntosCriticosInput}</span>}
+                <Textarea rows={6} value={puntosCriticosInput} placeholder="Uno por línea" onChange={e => handleChange('puntosCriticosInput', e.target.value, setPuntosCriticosInput)}onBlur={e => handleBlur('puntosCriticosInput', e.target.value)}/>
+                {touched.puntosCriticosInput && errors.puntosCriticosInput && (<span className="text-red-500 text-sm block mt-2">{errors.puntosCriticosInput}</span>)}
               </CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle>Utensilios Necesarios</CardTitle></CardHeader>
               <CardContent>
-                <Textarea rows={4} value={utensiliosInput} placeholder="Uno por línea" onChange={e=>setUtensiliosInput(e.target.value)} />
-                {errors.utensiliosInput && <span className="text-red-500 text-sm block mt-2">{errors.utensiliosInput}</span>}
+                <Textarea rows={4} value={utensiliosInput} placeholder="Uno por línea" onChange={e => handleChange('utensiliosInput', e.target.value, setUtensiliosInput)}onBlur={e => handleBlur('utensiliosInput', e.target.value)}/>
+                {touched.utensiliosInput && errors.utensiliosInput && (<span className="text-red-500 text-sm block mt-2">{errors.utensiliosInput}</span>)}
               </CardContent>
             </Card>
           </TabsContent>
+
           <TabsContent value="montaje" className="space-y-6">
             <Card>
               <CardHeader><CardTitle>Montaje Final</CardTitle></CardHeader>
               <CardContent>
-                <Textarea rows={5} value={montaje} onChange={e=>setMontaje(e.target.value)} placeholder="Descripción del montaje final" />
-                {errors.montaje && <span className="text-red-500 text-sm block mt-2">{errors.montaje}</span>}
+                <Textarea rows={5} value={montaje} onChange={e => handleChange('montaje', e.target.value, setMontaje)} onBlur={e => handleBlur('montaje', e.target.value)} placeholder="Descripción del montaje final" />
+                {touched.montaje && errors.montaje && (<span className="text-red-500 text-sm block mt-2">{errors.montaje}</span>)}
               </CardContent>
             </Card>
           </TabsContent>
