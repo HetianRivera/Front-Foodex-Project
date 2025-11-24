@@ -9,7 +9,6 @@ import {
   Clock, 
   AlertTriangle,
   Utensils,
-  DollarSign,
   Package
 } from 'lucide-react';
 import { DashboardHeader } from './DashboardHeader';
@@ -43,18 +42,6 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
     return `${cantidad} ${unidad}`;
   };
 
-  const calcularCostoTotal = () => {
-    return recipe.ingredientes.reduce((total, categoria) => {
-      return total + categoria.ingredientes.reduce((subtotal, ing) => subtotal + ing.precioTotal, 0);
-    }, 0);
-  };
-
-  const costoMateriaPrima = calcularCostoTotal();
-  const costoMakeup = costoMateriaPrima * (recipe.makeup / 100);
-  const costoNeto = costoMateriaPrima + costoMakeup;
-  const precioVentaNeta = costoNeto * recipe.factorMultiplicacion;
-  const ivaValor = precioVentaNeta * (recipe.iva / 100);
-  const precioVentaFinal = precioVentaNeta + ivaValor;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -83,7 +70,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
       {/* Content - Optimizado para tablet */}
       <div className="container mx-auto max-w-6xl p-6">
         <Tabs defaultValue="proceso" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 h-auto gap-2 bg-slate-200 p-2">
+          <TabsList className="grid w-full grid-cols-4 h-auto gap-2 bg-slate-200 p-2">
             <TabsTrigger value="proceso" className="text-lg py-5 data-[state=active]:bg-white">
               <ChefHat className="w-6 h-6 mr-2" />
               Proceso
@@ -99,10 +86,6 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             <TabsTrigger value="montaje" className="text-lg py-5 data-[state=active]:bg-white">
               <Utensils className="w-6 h-6 mr-2" />
               Montaje
-            </TabsTrigger>
-            <TabsTrigger value="costos" className="text-lg py-5 data-[state=active]:bg-white">
-              <DollarSign className="w-6 h-6 mr-2" />
-              Costos
             </TabsTrigger>
           </TabsList>
 
@@ -146,105 +129,98 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             </Card>
 
             {/* Procesos - TEXTO OPTIMIZADO PARA TABLET */}
-            {recipe.procesos.map((proceso, idx) => (
-              <Card key={idx} className="border-l-8 border-l-primary shadow-lg">
-                <CardHeader className="bg-slate-100 pb-6">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-3xl flex items-center gap-4">
-                      <Badge className="text-2xl px-5 py-2">
-                        ETAPA {proceso.etapa}
-                      </Badge>
-                      <span>{proceso.titulo}</span>
-                    </CardTitle>
-                    <div className="flex items-center gap-3 text-slate-600 flex-shrink-0">
-                      <Clock className="w-7 h-7" />
-                      <span className="text-2xl">{proceso.tiempoEstimado} min</span>
+            {recipe.procesos
+              .filter(p => p.titulo && p.descripcion && p.tiempoEstimado)
+              .map((proceso, idx) => (
+                <Card key={idx} className="border-l-8 border-l-primary shadow-lg">
+                  <CardHeader className="bg-slate-100 pb-6">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-3xl flex items-center gap-4">
+                        <Badge className="text-2xl px-5 py-2">
+                          ETAPA {proceso.etapa}
+                        </Badge>
+                        <span>{proceso.titulo}</span>
+                      </CardTitle>
+                      <div className="flex items-center gap-3 text-slate-600 flex-shrink-0">
+                        <Clock className="w-7 h-7" />
+                        <span className="text-2xl">{proceso.tiempoEstimado} min</span>
+                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-8 pb-8 space-y-6">
-                  {/* Descripción - TEXTO VISIBLE EN TABLET */}
-                  <div className="bg-white p-6 rounded-xl border-2 border-slate-200">
-                    <p className="text-xl leading-relaxed text-slate-900">
-                      {proceso.descripcion}
-                    </p>
-                  </div>
+                  </CardHeader>
+                  <CardContent className="pt-8 pb-8 space-y-6">
+                    {/* Descripción - TEXTO VISIBLE EN TABLET */}
+                    <div className="bg-white p-6 rounded-xl border-2 border-slate-200">
+                      <p className="text-xl leading-relaxed text-slate-900">
+                        {proceso.descripcion}
+                      </p>
+                    </div>
 
-                  {/* Ingredientes Usados - FORMATO CLARO TABLET */}
-                  <div className="bg-amber-50 p-6 rounded-xl border-2 border-amber-200">
-                    <h4 className="text-xl mb-4 flex items-center gap-3">
-                      <Package className="w-7 h-7 text-amber-700" />
-                      <span>Ingredientes para esta etapa:</span>
-                    </h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      {proceso.ingredientesUsados.map((ing, ingIdx) => (
-                        <div key={ingIdx} className="bg-white p-5 rounded-lg border-2 border-amber-300">
-                          <p className="text-lg leading-relaxed">
-                            <span className="block mb-1">{ing.nombre}</span>
-                            <span className="text-2xl text-primary block">
-                              {formatUnit(ing.cantidad, ing.unidad)}
-                            </span>
-                          </p>
-                        </div>
-                      ))}
+                    {/* Ingredientes Usados - FORMATO CLARO TABLET */}
+                    <div className="bg-amber-50 p-6 rounded-xl border-2 border-amber-200">
+                      <h4 className="text-xl mb-4 flex items-center gap-3">
+                        <Package className="w-7 h-7 text-amber-700" />
+                        <span>Ingredientes para esta etapa:</span>
+                      </h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        {proceso.ingredientesUsados.map((ing, ingIdx) => (
+                          <div key={ingIdx} className="bg-white p-5 rounded-lg border-2 border-amber-300">
+                            <p className="text-lg leading-relaxed">
+                              <span className="block mb-1">{ing.nombre}</span>
+                              <span className="text-2xl text-primary block">
+                                {formatUnit(ing.cantidad, ing.unidad)}
+                              </span>
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))}
           </TabsContent>
 
           {/* Ingredientes Tab */}
           <TabsContent value="ingredientes" className="space-y-6">
-            {recipe.ingredientes.map((categoria, idx) => (
-              <Card key={idx}>
-                <CardHeader className="bg-slate-100 pb-6">
-                  <CardTitle className="text-2xl flex items-center gap-3">
-                    <Badge variant="secondary" className="text-xl px-5 py-2">
-                      {categoria.categoria}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xl py-4">Ingrediente</TableHead>
-                        <TableHead className="text-xl py-4">Cantidad</TableHead>
-                        <TableHead className="text-right text-xl py-4">Precio Unit.</TableHead>
-                        <TableHead className="text-right text-xl py-4">Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {categoria.ingredientes.map((ing, ingIdx) => (
-                        <TableRow key={ingIdx} className="text-lg">
-                          <TableCell className="text-xl py-5">{ing.nombre}</TableCell>
-                          <TableCell className="text-xl py-5">
-                            <Badge variant="outline" className="text-lg px-4 py-2">
-                              {formatUnit(ing.cantidad, ing.unidad)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right text-xl py-5">
-                            ${ing.precioUnitario.toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right text-xl py-5">
-                            ${ing.precioTotal.toLocaleString()}
+            {recipe.ingredientes
+              .filter(categoria => categoria.ingredientes && categoria.ingredientes.length > 0)
+              .map((categoria, idx) => (
+                <Card key={idx}>
+                  <CardHeader className="bg-slate-100 pb-6">
+                    <CardTitle className="text-2xl flex items-center gap-3">
+                      <Badge variant="secondary" className="text-xl px-5 py-2">
+                        {categoria.categoria}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xl py-4">Ingrediente</TableHead>
+                          <TableHead className="text-xl py-4">Cantidad</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {categoria.ingredientes.map((ing, ingIdx) => (
+                          <TableRow key={ingIdx} className="text-lg">
+                            <TableCell className="text-xl py-5">{ing.nombre}</TableCell>
+                            <TableCell className="text-xl py-5">
+                              <Badge variant="outline" className="text-lg px-4 py-2">
+                                {formatUnit(ing.cantidad, ing.unidad)}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="bg-slate-50">
+                          <TableCell colSpan={3} className="text-xl py-5">
+                            Subtotal {categoria.categoria}
                           </TableCell>
                         </TableRow>
-                      ))}
-                      <TableRow className="bg-slate-50">
-                        <TableCell colSpan={3} className="text-xl py-5">
-                          Subtotal {categoria.categoria}
-                        </TableCell>
-                        <TableCell className="text-right text-2xl py-5">
-                          ${categoria.ingredientes.reduce((sum, ing) => sum + ing.precioTotal, 0).toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              ))}
           </TabsContent>
 
           {/* Técnicas y Puntos Críticos */}
@@ -323,104 +299,6 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                     {recipe.montaje}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Argumentaciones */}
-            <div className="grid grid-cols-2 gap-6">
-              <Card>
-                <CardHeader className="bg-slate-100 pb-6">
-                  <CardTitle className="text-2xl">Argumentación Comercial</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6 pb-6">
-                  <p className="text-xl leading-relaxed">{recipe.argumentacionComercial}</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="bg-slate-100 pb-6">
-                  <CardTitle className="text-2xl">Argumentación Técnica</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6 pb-6">
-                  <p className="text-xl leading-relaxed">{recipe.argumentacionTecnica}</p>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Costos Tab */}
-          <TabsContent value="costos" className="space-y-6">
-            <Card>
-              <CardHeader className="pb-6">
-                <CardTitle className="text-3xl">Cálculo de Costos</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-6">
-                <div className="space-y-5">
-                  <div className="flex justify-between items-center py-4 border-b-2 text-xl">
-                    <span>Costo de Materia Prima</span>
-                    <span className="text-2xl">${costoMateriaPrima.toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center py-4 border-b-2 text-xl">
-                    <span>Make Up ({recipe.makeup}%)</span>
-                    <span className="text-2xl">${costoMakeup.toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center py-4 border-b-2 text-xl">
-                    <span>Costo Neto / Subtotal</span>
-                    <span className="text-2xl">${costoNeto.toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center py-4 border-b-2 text-xl">
-                    <span>Factor de Multiplicación (x{recipe.factorMultiplicacion})</span>
-                    <span className="text-2xl">${precioVentaNeta.toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center py-4 border-b-2 text-xl">
-                    <span>I.V.A. ({recipe.iva}%)</span>
-                    <span className="text-2xl">${ivaValor.toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center py-6 bg-primary/10 px-8 rounded-xl mt-6">
-                    <span className="text-2xl">Precio de Venta Final</span>
-                    <span className="text-4xl text-primary">${precioVentaFinal.toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center py-5 bg-slate-100 px-8 rounded-xl">
-                    <span className="text-xl">Precio Venta por Porción</span>
-                    <span className="text-3xl">${(precioVentaFinal / recipe.porcion).toLocaleString()}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-6">
-                <CardTitle className="text-3xl">Resumen por Categoría</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xl py-4">Categoría</TableHead>
-                      <TableHead className="text-right text-xl py-4">Total</TableHead>
-                      <TableHead className="text-right text-xl py-4">% del Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recipe.ingredientes.map((categoria, idx) => {
-                      const totalCategoria = categoria.ingredientes.reduce((sum, ing) => sum + ing.precioTotal, 0);
-                      const porcentaje = (totalCategoria / costoMateriaPrima) * 100;
-                      return (
-                        <TableRow key={idx}>
-                          <TableCell className="text-xl py-5">{categoria.categoria}</TableCell>
-                          <TableCell className="text-right text-xl py-5">${totalCategoria.toLocaleString()}</TableCell>
-                          <TableCell className="text-right text-xl py-5">{porcentaje.toFixed(1)}%</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
               </CardContent>
             </Card>
           </TabsContent>
