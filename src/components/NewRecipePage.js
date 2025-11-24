@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Textarea } from './ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
-import { ChefHat, Package, AlertTriangle, Utensils, DollarSign } from 'lucide-react';
+import { ChefHat, Package, AlertTriangle, Utensils } from 'lucide-react';
 import { toast } from 'sonner';
 
 const CATEGORIES = ['Cárnicos','Verduras','Ovolácteos','Abarrotes','Licores','Otros'];
@@ -17,15 +17,10 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   const [codigo, setCodigo] = useState('');
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState('');
-  const [argumentacionComercial, setArgumentacionComercial] = useState('');
-  const [argumentacionTecnica, setArgumentacionTecnica] = useState('');
   const [imagenFile, setImagenFile] = useState(null);
   const [porcion, setPorcion] = useState(1);
   const [gramajePorPorcion, setGramajePorPorcion] = useState(0);
   const [tiempo, setTiempo] = useState(0);
-  const [makeup, setMakeup] = useState(3);
-  const [factorMultiplicacion, setFactorMultiplicacion] = useState(3);
-  const [iva, setIva] = useState(19);
   const [tecnicasBaseInput, setTecnicasBaseInput] = useState('');
   const [puntosCriticosInput, setPuntosCriticosInput] = useState('');
   const [utensiliosInput, setUtensiliosInput] = useState('');
@@ -33,6 +28,8 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   const [tareaInicio, setTareaInicio] = useState('');
   const [activeTab, setActiveTab] = useState('general');
   const [savedIngredientes, setSavedIngredientes] = useState([]);
+  const [errors, setErrors] = useState({});
+
 
   const [ingredientesCategorias, setIngredientesCategorias] = useState(
     CATEGORIES.map(c => ({ categoria: c, ingredientes: [] }))
@@ -45,7 +42,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   const addIngredient = (categoriaIndex) => {
     setIngredientesCategorias(prev => prev.map((cat,i)=> i===categoriaIndex ? {
       ...cat,
-      ingredientes: [...cat.ingredientes,{ nombre:'', cantidad:0, unidad:'gr', precioUnitario:0 }]
+      ingredientes: [...cat.ingredientes,{ nombre:'', cantidad:0, unidad:'gr'}]
     } : cat));
   };
   const updateIngredient = (categoriaIndex, ingredientIndex, key, value) => {
@@ -117,14 +114,30 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   };
 
   const handleSave = () => {
-    if (!codigo || !nombre) return;
+    const newErrors = {};
+    if (!codigo) newErrors.codigo = 'El código es obligatorio';
+    if (!nombre) newErrors.nombre = 'El nombre es obligatorio';
+    if (!categoria) newErrors.categoria = 'La categoría es obligatoria';
+    if (!tiempo) newErrors.tiempo = 'El tiempo es obligatorio';
+    if (!tareaInicio) newErrors.tareaInicio = 'La tarea de inicio es obligatoria';
+
+    if (!ingredientesCategorias.some(cat => cat.ingredientes.length > 0)) {newErrors.ingredientes = 'Debes agregar al menos un ingrediente';}
+
+    if (!procesos.some(p => p.titulo.trim() && p.descripcion.trim() && p.tiempoEstimado)) {newErrors.procesos = 'Debes completar al menos una etapa con título, tiempo y descripción';}
+
+    if (!tecnicasBaseInput.trim()) {newErrors.tecnicasBaseInput = 'Debes ingresar al menos una técnica de base';}
+    if (!puntosCriticosInput.trim()) {newErrors.puntosCriticosInput = 'Debes ingresar al menos un punto crítico de control';}
+    if (!utensiliosInput.trim()) {newErrors.utensiliosInput = 'Debes ingresar al menos un utensilio necesario';}
+    if (!montaje.trim()) {newErrors.montaje = 'Debes ingresar el montaje final';}
+
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
+
     const ingredientesFinal = ingredientesCategorias.map(cat => ({
       categoria: cat.categoria,
       ingredientes: cat.ingredientes.map(ing => {
         const cantidadNum = Number(ing.cantidad)||0;
-        const precioUnit = Number(ing.precioUnitario)||0;
-        const precioTotal = +(cantidadNum * precioUnit).toFixed(2);
-        return { ...ing, cantidad: cantidadNum, precioUnitario: precioUnit, precioTotal };
+        return { ...ing, cantidad: cantidadNum};
       })
     }));
     const receta = {
@@ -136,8 +149,6 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       porcion: Number(porcion)||1,
       tiempo: Number(tiempo)||0,
       rendimiento: Number(porcion)||1,
-      argumentacionComercial: argumentacionComercial||'',
-      argumentacionTecnica: argumentacionTecnica||'',
       tareaInicio: tareaInicio||'',
       ingredientes: ingredientesFinal,
       procesos: procesos.map(p => ({
@@ -151,9 +162,6 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       puntosCriticos: puntosCriticosInput.split('\n').map(t=>t.trim()).filter(Boolean),
       utensilios: utensiliosInput.split('\n').map(t=>t.trim()).filter(Boolean),
       montaje,
-      makeup: Number(makeup)||0,
-      factorMultiplicacion: Number(factorMultiplicacion)||1,
-      iva: Number(iva)||0,
       gramajePorPorcion: Number(gramajePorPorcion)||0
     };
     onSave(receta);
@@ -168,9 +176,6 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       ['Porciones', String(porcion)],
       ['Gramaje por porción (g)', String(gramajePorPorcion)],
       ['Tiempo (min)', String(tiempo)],
-      ['Make Up %', String(makeup)],
-      ['Factor Multiplicación', String(factorMultiplicacion)],
-      ['IVA %', String(iva)]
     ];
     const tableMeta = new Table({
       rows: metaRows.map(r => new TableRow({
@@ -186,8 +191,6 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
           new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: cat.categoria, bold: true })] })] }),
           new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Cantidad', bold: true })] })] }),
           new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Unidad', bold: true })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Precio Unit', bold: true })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Total', bold: true })] })] }),
         ]
       });
       const rows = cat.ingredientes.map(ing => new TableRow({
@@ -195,8 +198,6 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
           new TableCell({ children: [new Paragraph(ing.nombre)] }),
           new TableCell({ children: [new Paragraph(String(ing.cantidad))] }),
           new TableCell({ children: [new Paragraph(ing.unidad)] }),
-          new TableCell({ children: [new Paragraph(String(ing.precioUnitario||0))] }),
-          new TableCell({ children: [new Paragraph(String(((ing.cantidad||0)*(ing.precioUnitario||0)).toFixed(2)))] }),
         ]
       }));
       return new Table({ rows: [header, ...rows] });
@@ -208,12 +209,6 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
             new Paragraph({ children: [new TextRun({ text: 'Ficha Técnica', bold: true, size: 32 })] }),
             new Paragraph(''),
             tableMeta,
-            new Paragraph(''),
-            new Paragraph({ children: [new TextRun({ text: 'Argumentación Comercial', bold: true })] }),
-            new Paragraph(argumentacionComercial || ''),
-            new Paragraph(''),
-            new Paragraph({ children: [new TextRun({ text: 'Argumentación Técnica', bold: true })] }),
-            new Paragraph(argumentacionTecnica || ''),
             new Paragraph(''),
             new Paragraph({ children: [new TextRun({ text: 'Tarea de Inicio', bold: true })] }),
             new Paragraph(tareaInicio || ''),
@@ -278,29 +273,33 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
               Técnicas/PCC
             </TabsTrigger>
             <TabsTrigger value="montaje" className="text-lg py-5 data-[state=active]:bg-white">
-              <DollarSign className="w-6 h-6 mr-2" />
-              Montaje/Costos
+              <Utensils className="w-6 h-6 mr-2"  />
+              Montaje
             </TabsTrigger>
           </TabsList>
           <TabsContent value="general" className="space-y-6">
             <Card>
               <CardHeader><CardTitle>Datos Generales</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-4 gap-4">
+              <CardContent className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block mb-1">Código</label>
-                  <Input value={codigo} onChange={e=>setCodigo(e.target.value)} />
+                  <Input value={codigo} onChange={e=>setCodigo(e.target.value)} required />
+                  {errors.codigo && <span className="text-red-500 text-sm">{errors.codigo}</span>}
                 </div>
                 <div>
                   <label className="block mb-1">Nombre</label>
-                  <Input value={nombre} onChange={e=>setNombre(e.target.value)} />
+                  <Input value={nombre} onChange={e=>setNombre(e.target.value)} required/>
+                  {errors.nombre && <span className="text-red-500 text-sm">{errors.nombre}</span>}
                 </div>
                 <div>
                   <label className="block mb-1">Categoría</label>
-                  <Input value={categoria} onChange={e=>setCategoria(e.target.value)} />
+                  <Input value={categoria} onChange={e=>setCategoria(e.target.value)} required/>
+                  {errors.categoria && <span className="text-red-500 text-sm">{errors.categoria}</span>}
                 </div>
                 <div>
                   <label className="block mb-1">Tiempo (min)</label>
-                  <Input type="number" value={tiempo} min={0} onChange={e=>setTiempo(e.target.value)} />
+                  <Input type="number" value={tiempo} min={0} onChange={e=>setTiempo(e.target.value)} required/>
+                  {errors.tiempo && <span className="text-red-500 text-sm">{errors.tiempo}</span>}
                 </div>
                 <div>
                   <label className="block mb-1">Porciones</label>
@@ -310,38 +309,20 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                   <label className="block mb-1">Gramaje por porción (g)</label>
                   <Input type="number" value={gramajePorPorcion} min={0} onChange={e=>setGramajePorPorcion(e.target.value)} />
                 </div>
-                <div>
-                  <label className="block mb-1">Make Up %</label>
-                  <Input type="number" value={makeup} min={0} onChange={e=>setMakeup(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block mb-1">Factor Multiplicación</label>
-                  <Input type="number" value={factorMultiplicacion} min={1} step={0.1} onChange={e=>setFactorMultiplicacion(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block mb-1">IVA %</label>
-                  <Input type="number" value={iva} min={0} onChange={e=>setIva(e.target.value)} />
-                </div>
-                <div className="col-span-2">
+                <div className="col-span-3">
                   <label className="block mb-1">Tarea de Inicio (M.e.P.)</label>
-                  <Textarea rows={3} value={tareaInicio} onChange={e=>setTareaInicio(e.target.value)} />
+                  <Textarea rows={3} value={tareaInicio} onChange={e=>setTareaInicio(e.target.value)} required/>
+                    {errors.tareaInicio && <span className="text-red-500 text-sm">{errors.tareaInicio}</span>}
                 </div>
                 <div className="col-span-2">
-                  <label className="block mb-1">Imagen del Plato (opcional)</label>
-                  <Input type="file" accept="image/*" onChange={e=>setImagenFile(e.target.files?.[0]||null)} />
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Argumentaciones</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block mb-1">Argumentación Comercial</label>
-                  <Textarea rows={4} value={argumentacionComercial} onChange={e=>setArgumentacionComercial(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block mb-1">Argumentación Técnica</label>
-                  <Textarea rows={4} value={argumentacionTecnica} onChange={e=>setArgumentacionTecnica(e.target.value)} />
+                  <label className="block mb-2">Imagen del Plato (opcional)</label>
+                  <div className="flex items-center gap-3 bg-gray-100 border border-gray-300 rounded-lg px-4 py-3">
+                    <label className="bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded border border-gray-300 cursor-pointer text-sm whitespace-nowrap">
+                      Seleccionar archivo
+                      <input type="file" accept="image/*" onChange={e => setImagenFile(e.target.files?.[0] || null)} className="hidden"/>
+                    </label>
+                    <span className="truncate">{imagenFile ? imagenFile.name : 'Ningún archivo seleccionado'}</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -356,6 +337,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                 </div>
               </CardHeader>
               <CardContent className="space-y-8">
+                {errors.ingredientes && (<span className="text-red-500 text-sm block mb-2">{errors.ingredientes}</span>)}
                 {ingredientesCategorias.map((cat, ci) => (
                   <div key={ci} className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -364,7 +346,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                     </div>
                     <div className="space-y-3">
                       {cat.ingredientes.map((ing, ii) => (
-                        <div key={ii} className="grid grid-cols-7 gap-2 items-end">
+                        <div key={ii} className="grid grid-cols-6 gap-2 items-end">
                           <div className="col-span-2">
                             <label className="block mb-1">Nombre</label>
                             <Input value={ing.nombre} onChange={e=>updateIngredient(ci,ii,'nombre',e.target.value)} />
@@ -378,13 +360,6 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                             <select className="w-full border rounded px-2 py-2" value={ing.unidad} onChange={e=>updateIngredient(ci,ii,'unidad',e.target.value)}>
                               {UNIDADES.map(u=> <option key={u} value={u}>{u}</option>)}
                             </select>
-                          </div>
-                          <div>
-                            <label className="block mb-1">Precio Unitario</label>
-                            <Input type="number" min={0} value={ing.precioUnitario} onChange={e=>updateIngredient(ci,ii,'precioUnitario',e.target.value)} />
-                          </div>
-                          <div className="flex flex-col justify-end">
-                            <p className="text-sm text-slate-600">Total: {((Number(ing.cantidad)||0)*(Number(ing.precioUnitario)||0)).toFixed(2)}</p>
                           </div>
                           <div className="flex gap-2 justify-end">
                             <Button variant="destructive" size="sm" onClick={()=>removeIngredient(ci,ii)}>Eliminar</Button>
@@ -402,6 +377,9 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
             <Card>
               <CardHeader><CardTitle>Etapas A - E</CardTitle></CardHeader>
               <CardContent className="space-y-8">
+                {errors.procesos && (
+  <span className="text-red-500 text-sm block mb-2">{errors.procesos}</span>
+)}
                 {procesos.map((p, pi)=>(
                   <div key={p.etapa} className="space-y-4 p-4 rounded border">
                     <h4 className="text-lg font-semibold">Etapa {p.etapa}</h4>
@@ -474,18 +452,21 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
               <CardHeader><CardTitle>Técnicas de Base</CardTitle></CardHeader>
               <CardContent>
                 <Textarea rows={6} value={tecnicasBaseInput} placeholder="Una por línea" onChange={e=>setTecnicasBaseInput(e.target.value)} />
+                {errors.tecnicasBaseInput && <span className="text-red-500 text-sm block mt-2">{errors.tecnicasBaseInput}</span>}
               </CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle>Puntos Críticos de Control (PCC)</CardTitle></CardHeader>
               <CardContent>
                 <Textarea rows={6} value={puntosCriticosInput} placeholder="Uno por línea" onChange={e=>setPuntosCriticosInput(e.target.value)} />
+                {errors.puntosCriticosInput && <span className="text-red-500 text-sm block mt-2">{errors.puntosCriticosInput}</span>}
               </CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle>Utensilios Necesarios</CardTitle></CardHeader>
               <CardContent>
                 <Textarea rows={4} value={utensiliosInput} placeholder="Uno por línea" onChange={e=>setUtensiliosInput(e.target.value)} />
+                {errors.utensiliosInput && <span className="text-red-500 text-sm block mt-2">{errors.utensiliosInput}</span>}
               </CardContent>
             </Card>
           </TabsContent>
@@ -494,30 +475,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
               <CardHeader><CardTitle>Montaje Final</CardTitle></CardHeader>
               <CardContent>
                 <Textarea rows={5} value={montaje} onChange={e=>setMontaje(e.target.value)} placeholder="Descripción del montaje final" />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Resumen Costos (estimado)</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
-                {(() => {
-                  const totalMateriaPrima = ingredientesCategorias.reduce((sum,cat)=> sum + cat.ingredientes.reduce((s,ing)=> s + (Number(ing.cantidad)||0)*(Number(ing.precioUnitario)||0),0),0);
-                  const costoMakeup = totalMateriaPrima * (Number(makeup)||0)/100;
-                  const costoNeto = totalMateriaPrima + costoMakeup;
-                  const precioVentaNeta = costoNeto * (Number(factorMultiplicacion)||1);
-                  const ivaValor = precioVentaNeta * (Number(iva)||0)/100;
-                  const precioFinal = precioVentaNeta + ivaValor;
-                  return (
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <p>Materia Prima: <strong>{totalMateriaPrima.toFixed(2)}</strong></p>
-                      <p>Make Up: <strong>{costoMakeup.toFixed(2)}</strong></p>
-                      <p>Costo Neto: <strong>{costoNeto.toFixed(2)}</strong></p>
-                      <p>Venta Neta: <strong>{precioVentaNeta.toFixed(2)}</strong></p>
-                      <p>IVA: <strong>{ivaValor.toFixed(2)}</strong></p>
-                      <p>Precio Final: <strong>{precioFinal.toFixed(2)}</strong></p>
-                      <p>Precio por Porción: <strong>{(porcion>0? (precioFinal/porcion).toFixed(2):'0')}</strong></p>
-                    </div>
-                  );
-                })()}
+                {errors.montaje && <span className="text-red-500 text-sm block mt-2">{errors.montaje}</span>}
               </CardContent>
             </Card>
           </TabsContent>
