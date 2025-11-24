@@ -209,7 +209,10 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
     if (!montaje.trim()) {newErrors.montaje = 'Debes ingresar el montaje final';}
 
     setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) return;
+    if (Object.keys(newErrors).length > 0) {
+    toast.error('No se ha podido guardar la receta. Faltan campos obligatorios');
+    return;
+  }
 
     const ingredientesFinal = ingredientesCategorias.map(cat => ({
       categoria: cat.categoria,
@@ -242,6 +245,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       montaje,
       gramajePorPorcion: Number(gramajePorPorcion)||0
     };
+    toast.success(`Receta ${nombre} guardada exitosamente`);
     onSave(receta);
   };
 
