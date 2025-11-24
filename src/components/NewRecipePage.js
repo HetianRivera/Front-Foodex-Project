@@ -125,8 +125,15 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       ...ing,
       categoria: c.categoria
     }))).filter(ing => ing.nombre.trim());
+
+    if (flat.length === 0) {
+      toast.error('No hay ingredientes para guardar');
+      return;
+    }
+
     setSavedIngredientes(flat);
-    toast.success(`${flat.length} ingredientes guardados`);
+    const count = flat.length;
+    toast.success(count === 1 ? '1 ingrediente guardado' : `${count} ingredientes guardados`);
   };
 
   const addIngredienteEtapa = (etapaIndex) => {
