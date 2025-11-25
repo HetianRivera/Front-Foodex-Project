@@ -119,6 +119,32 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       ingredientes: cat.ingredientes.filter((_,j)=> j!==ingredientIndex)
     } : cat));
   };
+  const saveIngrediente = (categoriaIndex, ingredientIndex) => {
+    const cat = ingredientesCategorias[categoriaIndex];
+    const ing = cat?.ingredientes?.[ingredientIndex];
+    if (!ing) return;
+    const nombre = (ing.nombre || '').trim();
+    if (!nombre) {
+      toast.error('Ingresa un nombre de ingrediente');
+      return;
+    }
+    const toSave = {
+      nombre,
+      cantidad: Number(ing.cantidad) || 0,
+      unidad: ing.unidad || 'gr',
+      categoria: cat.categoria
+    };
+    setSavedIngredientes(prev => {
+      const idx = prev.findIndex(x => x.nombre === toSave.nombre);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...toSave };
+        return copy;
+      }
+      return [...prev, toSave];
+    });
+    toast.success('Ingrediente guardado');
+  };
   
   const saveIngredientes = () => {
     const flat = ingredientesCategorias.flatMap(c => c.ingredientes.map(ing => ({
@@ -414,7 +440,6 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                 <CardTitle>Ingredientes por Categoría</CardTitle>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={adjustToGramaje}>Ajustar a Gramaje</Button>
-                  <Button onClick={saveIngredientes}>Guardar Ingredientes</Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-8">
@@ -447,6 +472,9 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                             </select>
                           </div>
                           <div className="flex gap-2 justify-end">
+                            <Button size="sm" onClick={()=>saveIngrediente(ci,ii)}>
+                              Guardar
+                            </Button>
                             <Button variant="destructive" size="sm" onClick={()=>removeIngredient(ci,ii)}>
                               Eliminar
                             </Button>
