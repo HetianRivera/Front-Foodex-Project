@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
 import { ChefHat, Package, AlertTriangle, Utensils } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '../api/client';
 
 const CATEGORIES = ['Cárnicos','Verduras','Ovolácteos','Abarrotes','Licores','Otros'];
 const UNIDADES = ['gr','kg','ml','lt','u'];
@@ -605,4 +606,10 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       <DashboardFooter />
     </div>
   );
+}
+
+export async function crearReceta(payload) {
+  // payload con campos receta
+  const { data } = await api.post('/recetas/', payload);
+  return data;
 }

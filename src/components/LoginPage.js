@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { User, GraduationCap } from 'lucide-react';
 import Logo from '../imports/Logo1';
+import { loginRut } from '../api/auth';
 
 export function LoginPage({ onLogin }) {
   const [rut, setRut] = useState('');
@@ -78,17 +79,21 @@ export function LoginPage({ onLogin }) {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!rut || !selectedRole) return;
-    
-    // Validación final del RUT
-    if (!validateRut(rut)) {
-      setRutError('RUT inválido. Verifica el dígito verificador.');
-      return;
+    if (!validateRut(rut) || !selectedRole) return;
+    try {
+      const resp = await loginRut(rut, selectedRole);
+      onLogin(resp); // resp incluye access, rut, role
+    } catch (err) {
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail || '';
+      if (status === 404 || status === 400 || /no encontrado|inválido/i.test(detail)) {
+        setRutError('RUT no válido');
+      } else {
+        setRutError('Error al validar el RUT. Intenta nuevamente.');
+      }
     }
-    
-    onLogin({rut, role: selectedRole });
   };
 
   return (
