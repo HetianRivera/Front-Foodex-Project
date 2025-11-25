@@ -6,7 +6,6 @@ import { User, GraduationCap } from 'lucide-react';
 import Logo from '../imports/Logo1';
 
 export function LoginPage({ onLogin }) {
-  const [name, setName] = useState('');
   const [rut, setRut] = useState('');
   const [rutError, setRutError] = useState('');
   const [selectedRole, setSelectedRole] = useState(null);
@@ -81,7 +80,7 @@ export function LoginPage({ onLogin }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!name || !rut || !selectedRole) return;
+    if (!rut || !selectedRole) return;
     
     // Validación final del RUT
     if (!validateRut(rut)) {
@@ -89,7 +88,7 @@ export function LoginPage({ onLogin }) {
       return;
     }
     
-    onLogin({ name, rut, role: selectedRole });
+    onLogin({rut, role: selectedRole });
   };
 
   return (
@@ -128,12 +127,6 @@ export function LoginPage({ onLogin }) {
           </CardHeader>
           <CardContent className="pb-8">
             <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="mb-12">
-                <label className="block text-xl text-gray-700 mb-4 text-left">Nombre</label>
-                <Input type="text" placeholder="Ingresa tu nombre" value={name} onChange={(e) => setName(e.target.value)} required
-                  className="w-full px-6 py-6 text-4xl rounded-xl focus:outline-none transition-colors bg-gray-200 placeholder-gray-400 placeholder:text-xl"
-                />
-              </div>
               <div>
                 <label className="block text-xl text-gray-700 mb-4 text-left">RUT</label>
                 <Input 
@@ -185,7 +178,7 @@ export function LoginPage({ onLogin }) {
               <Button
                 type="submit" 
                 className="w-full bg-red-600 text-white py-10 rounded-xl hover:bg-red-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-2xl"
-                disabled={!name || !rut || !selectedRole || !!rutError}>
+                disabled={!rut || !selectedRole || !!rutError}>
                 Ingresar
               </Button>
             </form>
