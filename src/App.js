@@ -70,6 +70,7 @@ export default function App() {
         onSave={(payload) => {
           handleAddRecipe(payload);
           setCreatingNewRecipe(false);
+          toast.success(`Receta "${payload.nombre}" guardada correctamente`);
         }}
         user={user}
         recipes={recipes}

@@ -42,7 +42,6 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
     return `${cantidad} ${unidad}`;
   };
 
-
   return (
     <div className="min-h-screen bg-slate-50">
       <DashboardHeader user={user} onLogout={onLogout}>
@@ -135,7 +134,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                 <Card key={idx} className="border-l-8 border-l-primary shadow-lg">
                   <CardHeader className="bg-slate-100 pb-6">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-3xl flex items-center gap-4">
+                      <CardTitle className="text-3xl flex items:center gap-4">
                         <Badge className="text-2xl px-5 py-2">
                           ETAPA {proceso.etapa}
                         </Badge>
@@ -179,7 +178,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
               ))}
           </TabsContent>
 
-          {/* Ingredientes Tab */}
+          {/* Ingredientes Tab (sin columnas de costos) */}
           <TabsContent value="ingredientes" className="space-y-6">
             {recipe.ingredientes
               .filter(categoria => categoria.ingredientes && categoria.ingredientes.length > 0)
@@ -223,68 +222,34 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
               ))}
           </TabsContent>
 
-          {/* Técnicas y Puntos Críticos */}
+          {/* Técnicas Tab con estructura combinada (nombre + descripción) */}
           <TabsContent value="tecnicas" className="space-y-6">
-            <Card className="border-l-8 border-l-blue-500">
-              <CardHeader className="bg-blue-50 pb-6">
-                <CardTitle className="text-3xl">🎯 Técnicas de Base</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 pb-6">
-                <div className="grid grid-cols-2 gap-5">
-                  {recipe.tecnicasBase.map((tecnica, idx) => (
-                    <div key={idx} className="bg-white p-6 rounded-xl border-2 border-blue-200">
-                      <div className="flex items-start gap-4">
-                        <div className="bg-blue-100 p-3 rounded-full mt-1 flex-shrink-0">
-                          <ChefHat className="w-7 h-7 text-blue-600" />
-                        </div>
-                        <p className="text-xl leading-relaxed">{tecnica}</p>
-                      </div>
+            {Array.isArray(recipe.tecnicas) && recipe.tecnicas.length > 0 ? (
+              recipe.tecnicas.map((t, idx) => (
+                <Card key={idx} className="border-l-8 border-l-blue-500">
+                  <CardHeader className="bg-blue-50 pb-6">
+                    <CardTitle className="text-3xl flex items-center gap-4">
+                      <Badge className="text-2xl px-5 py-2">Técnica {idx+1}</Badge>
+                      <span>{t.nombre}</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6 pb-6 space-y-6">
+                    <div className="bg-white p-6 rounded-xl border-2 border-slate-200">
+                      <p className="text-xl leading-relaxed whitespace-pre-wrap">{t.descripcion}</p>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-8 border-l-red-500">
-              <CardHeader className="bg-red-50 pb-6">
-                <CardTitle className="text-3xl flex items-center gap-3">
-                  <AlertTriangle className="w-8 h-8 text-red-600" />
-                  Puntos Críticos de Control
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 pb-6">
-                <div className="space-y-4">
-                  {recipe.puntosCriticos.map((punto, idx) => (
-                    <div key={idx} className="bg-white p-6 rounded-xl border-2 border-red-200">
-                      <div className="flex items-start gap-4">
-                        <div className="bg-red-100 p-3 rounded-full mt-1 flex-shrink-0">
-                          <AlertTriangle className="w-7 h-7 text-red-600" />
-                        </div>
-                        <p className="text-xl leading-relaxed">{punto}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-8 border-l-purple-500">
-              <CardHeader className="bg-purple-50 pb-6">
-                <CardTitle className="text-3xl flex items-center gap-3">
-                  <Utensils className="w-8 h-8 text-purple-600" />
-                  Utensilios Necesarios
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 pb-6">
-                <div className="grid grid-cols-3 gap-4">
-                  {recipe.utensilios.map((utensilio, idx) => (
-                    <div key={idx} className="bg-white p-5 rounded-xl border-2 border-purple-200 text-center">
-                      <p className="text-lg leading-relaxed">{utensilio}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <Card className="border-l-8 border-l-blue-500">
+                <CardHeader className="bg-blue-50 pb-6">
+                  <CardTitle className="text-3xl">No hay técnicas registradas</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6 pb-6 text-xl text-slate-600">
+                  Esta receta aún no tiene técnicas agregadas.
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Montaje Tab */}
