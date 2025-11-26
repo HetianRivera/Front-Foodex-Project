@@ -15,6 +15,7 @@ const CATEGORIES = ['Cárnicos','Verduras','Ovolácteos','Abarrotes','Licores','
 const UNIDADES = ['gr','kg','ml','lt','u'];
 
 export function NewRecipePage({ onCancel, onSave, user, recipes }) {
+  const RELAX = String(process.env.REACT_APP_RELAX_RECIPE_VALIDATION || process.env.REACT_APP_OFFLINE || process.env.REACT_APP_USE_MOCK || 'true').toLowerCase() === 'true';
   const [codigo, setCodigo] = useState('');
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState('');
@@ -43,6 +44,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
 
   //Para validar que hay en cada campo
   const validateField = (fieldName, value) => {
+    if (RELAX) return '';
     let error = '';
     switch(fieldName) {
       case 'codigo':
@@ -214,32 +216,32 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       'codigo', 'nombre', 'categoria', 'tiempo', 'tareaInicio',
       'tecnicasBaseInput', 'puntosCriticosInput', 'utensiliosInput', 'montaje'
     ];
-    
     const newTouched = {};
     allFields.forEach(field => newTouched[field] = true);
     setTouched(newTouched);
 
-    const newErrors = {};
-    if (!codigo) newErrors.codigo = 'El código es obligatorio';
-    if (!nombre) newErrors.nombre = 'El nombre es obligatorio';
-    if (!categoria) newErrors.categoria = 'La categoría es obligatoria';
-    if (!tiempo) newErrors.tiempo = 'El tiempo es obligatorio';
-    if (!tareaInicio) newErrors.tareaInicio = 'La tarea de inicio es obligatoria';
-
-    if (!ingredientesCategorias.some(cat => cat.ingredientes.length > 0)) {newErrors.ingredientes = 'Debes agregar al menos un ingrediente';}
-
-    if (!procesos.some(p => p.titulo.trim() && p.descripcion.trim() && p.tiempoEstimado)) {newErrors.procesos = 'Debes completar al menos una etapa con título, tiempo y descripción';}
-
-    if (!tecnicasBaseInput.trim()) {newErrors.tecnicasBaseInput = 'Debes ingresar al menos una técnica de base';}
-    if (!puntosCriticosInput.trim()) {newErrors.puntosCriticosInput = 'Debes ingresar al menos un punto crítico de control';}
-    if (!utensiliosInput.trim()) {newErrors.utensiliosInput = 'Debes ingresar al menos un utensilio necesario';}
-    if (!montaje.trim()) {newErrors.montaje = 'Debes ingresar el montaje final';}
-
-    setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) {
-    toast.error('No se ha podido guardar la receta. Faltan campos obligatorios');
-    return;
-  }
+    let newErrors = {};
+    if (!RELAX) {
+      if (!codigo) newErrors.codigo = 'El código es obligatorio';
+      if (!nombre) newErrors.nombre = 'El nombre es obligatorio';
+      if (!categoria) newErrors.categoria = 'La categoría es obligatoria';
+      if (!tiempo) newErrors.tiempo = 'El tiempo es obligatorio';
+      if (!tareaInicio) newErrors.tareaInicio = 'La tarea de inicio es obligatoria';
+      if (!ingredientesCategorias.some(cat => cat.ingredientes.length > 0)) { newErrors.ingredientes = 'Debes agregar al menos un ingrediente'; }
+      if (!procesos.some(p => p.titulo.trim() && p.descripcion.trim() && p.tiempoEstimado)) { newErrors.procesos = 'Debes completar al menos una etapa con título, tiempo y descripción'; }
+      if (!tecnicasBaseInput.trim()) { newErrors.tecnicasBaseInput = 'Debes ingresar al menos una técnica de base'; }
+      if (!puntosCriticosInput.trim()) { newErrors.puntosCriticosInput = 'Debes ingresar al menos un punto crítico de control'; }
+      if (!utensiliosInput.trim()) { newErrors.utensiliosInput = 'Debes ingresar al menos un utensilio necesario'; }
+      if (!montaje.trim()) { newErrors.montaje = 'Debes ingresar el montaje final'; }
+      setErrors(newErrors);
+      if (Object.keys(newErrors).length > 0) {
+        toast.error('No se ha podido guardar la receta. Faltan campos obligatorios');
+        return;
+      }
+    } else {
+      // In relax mode, clear visual errors to avoid blocking UX
+      setErrors({});
+    }
 
     const ingredientesFinal = ingredientesCategorias.map(cat => ({
       categoria: cat.categoria,
@@ -250,8 +252,8 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
     }));
     const receta = {
       id: Date.now().toString(),
-      codigo,
-      nombre,
+      codigo: codigo || `REC-${Date.now()}`,
+      nombre: nombre || 'Sin nombre',
       categoria: categoria || 'Sin categoría',
       aporte: 0,
       porcion: Number(porcion)||1,
@@ -266,13 +268,13 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         ingredientesUsados: p.ingredientesUsados.map(i=> ({ ...i, cantidad: Number(i.cantidad)||0 })),
         tiempoEstimado: Number(p.tiempoEstimado)||0
       })),
-      tecnicasBase: tecnicasBaseInput.split('\n').map(t=>t.trim()).filter(Boolean),
-      puntosCriticos: puntosCriticosInput.split('\n').map(t=>t.trim()).filter(Boolean),
-      utensilios: utensiliosInput.split('\n').map(t=>t.trim()).filter(Boolean),
+      tecnicasBase: (tecnicasBaseInput || '').split('\n').map(t=>t.trim()).filter(Boolean),
+      puntosCriticos: (puntosCriticosInput || '').split('\n').map(t=>t.trim()).filter(Boolean),
+      utensilios: (utensiliosInput || '').split('\n').map(t=>t.trim()).filter(Boolean),
       montaje,
       gramajePorPorcion: Number(gramajePorPorcion)||0
     };
-    toast.success(`Receta ${nombre} guardada exitosamente`);
+    toast.success(`Receta ${(nombre || 'sin nombre')} guardada exitosamente`);
     onSave(receta);
   };
 
@@ -392,22 +394,22 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
               <CardContent className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block mb-1">Código</label>
-                  <Input value={codigo} onChange={e => handleChange('codigo', e.target.value, setCodigo)}onBlur={e => handleBlur('codigo', e.target.value)}required/>
+                  <Input value={codigo} onChange={e => handleChange('codigo', e.target.value, setCodigo)}onBlur={e => handleBlur('codigo', e.target.value)}/>
                   {touched.codigo && errors.codigo && (<span className="text-red-500 text-sm">{errors.codigo}</span>)}
                 </div>
                 <div>
                   <label className="block mb-1">Nombre</label>
-                  <Input value={nombre} onChange={e => handleChange('nombre', e.target.value, setNombre)}onBlur={e => handleBlur('nombre', e.target.value)}required/>
+                  <Input value={nombre} onChange={e => handleChange('nombre', e.target.value, setNombre)}onBlur={e => handleBlur('nombre', e.target.value)}/>
                   {touched.nombre && errors.nombre && (<span className="text-red-500 text-sm">{errors.nombre}</span>)}
                 </div>
                 <div>
                   <label className="block mb-1">Categoría</label>
-                  <Input value={categoria} onChange={e => handleChange('categoria', e.target.value, setCategoria)}onBlur={e => handleBlur('categoria', e.target.value)}required/>
+                  <Input value={categoria} onChange={e => handleChange('categoria', e.target.value, setCategoria)}onBlur={e => handleBlur('categoria', e.target.value)}/>
                   {touched.categoria && errors.categoria && (<span className="text-red-500 text-sm">{errors.categoria}</span>)}
                 </div>
                 <div>
                   <label className="block mb-1">Tiempo (min)</label>
-                  <Input type="number" value={tiempo} min={0} onChange={e => handleChange('tiempo', e.target.value, setTiempo)}onBlur={e => handleBlur('tiempo', e.target.value)}required/>
+                  <Input type="number" value={tiempo} min={0} onChange={e => handleChange('tiempo', e.target.value, setTiempo)}onBlur={e => handleBlur('tiempo', e.target.value)}/>
                   {touched.tiempo && errors.tiempo && (<span className="text-red-500 text-sm">{errors.tiempo}</span>)}                </div>
                 <div>
                   <label className="block mb-1">Porciones</label>
@@ -419,7 +421,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                 </div>
                 <div className="col-span-3">
                   <label className="block mb-1">Tarea de Inicio (M.e.P.)</label>
-                  <Textarea rows={3} value={tareaInicio} onChange={e => handleChange('tareaInicio', e.target.value, setTareaInicio)}onBlur={e => handleBlur('tareaInicio', e.target.value)}required/>
+                  <Textarea rows={3} value={tareaInicio} onChange={e => handleChange('tareaInicio', e.target.value, setTareaInicio)}onBlur={e => handleBlur('tareaInicio', e.target.value)}/>
                   {touched.tareaInicio && errors.tareaInicio && (<span className="text-red-500 text-sm">{errors.tareaInicio}</span>)}
                 </div>
                 <div className="col-span-2">
