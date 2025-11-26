@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 
 export function NewRecipeModal({ open, onOpenChange, onConfirm }) {
+  const RELAX = String(process.env.REACT_APP_RELAX_RECIPE_VALIDATION || process.env.REACT_APP_OFFLINE || process.env.REACT_APP_USE_MOCK || 'true').toLowerCase() === 'true';
   const [codigo, setCodigo] = useState('');
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState('');
@@ -18,7 +19,7 @@ export function NewRecipeModal({ open, onOpenChange, onConfirm }) {
 
   const handleConfirm = async (e) => {
     e.preventDefault();
-    if (!nombre || !codigo) return;
+    if (!RELAX && (!nombre || !codigo)) return;
 
     let docUrl = null;
     let docName = null;
@@ -29,8 +30,8 @@ export function NewRecipeModal({ open, onOpenChange, onConfirm }) {
 
     const payload = {
       id: Date.now().toString(),
-      codigo,
-      nombre,
+      codigo: codigo || `REC-${Date.now()}`,
+      nombre: nombre || 'Sin nombre',
       categoria: categoria || 'Sin categoría',
       aporte: 0,
       porcion: 1,
@@ -63,11 +64,11 @@ export function NewRecipeModal({ open, onOpenChange, onConfirm }) {
         <form className="space-y-4" onSubmit={handleConfirm}>
           <div>
             <label className="block mb-1">Código</label>
-            <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} required />
+            <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} />
           </div>
           <div>
             <label className="block mb-1">Nombre</label>
-            <Input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+            <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
           </div>
           <div>
             <label className="block mb-1">Categoría</label>
