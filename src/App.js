@@ -4,6 +4,7 @@ import { Dashboard } from "./components/Dashboard";
 import { RecipeView } from "./components/RecipeView";
 import { NewRecipePage } from "./components/NewRecipePage";
 import { toast } from "sonner";
+import HealthCheck from "./components/HealthCheck";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -48,7 +49,16 @@ export default function App() {
   };
 
   if (!user) {
-    return <LoginPage onLogin={handleLogin} />;
+    return (
+      <>
+        <LoginPage onLogin={handleLogin} />
+        {/* Componente opcional para verificar conexión al backend */}
+        <div className="p-4">
+          <h2 className="text-lg font-semibold mb-2">Health Check (opcional)</h2>
+          <HealthCheck />
+        </div>
+      </>
+    );
   }
 
   if (selectedRecipeId) {
