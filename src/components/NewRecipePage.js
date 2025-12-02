@@ -10,6 +10,7 @@ import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from
 import { ChefHat, Package, AlertTriangle, Utensils } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../api/client';
+import { createRecipe, getRecipe } from '../api/recipes';
 
 const CATEGORIES = ['Cárnicos','Verduras','Ovolácteos','Abarrotes','Licores','Otros'];
 const UNIDADES = ['gr','kg','ml','lt','u'];
@@ -185,7 +186,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       toast.success('Técnica guardada');
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
       const allFields = ['codigo','nombre','categoria','tiempo','tareaInicio','tecnicasBaseInput','puntosCriticosInput','utensiliosInput','montaje'];
       const newTouched = {}; allFields.forEach(field => newTouched[field] = true); setTouched(newTouched);
 
@@ -235,8 +236,30 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         montaje,
         gramajePorPorcion: Number(gramajePorPorcion)||0
       };
-      toast.success(`Receta ${(nombre || 'sin nombre')} guardada exitosamente`);
-      onSave(receta);
+      try {
+        const saved = await createRecipe(receta);
+        const idCandidate = saved?.id ?? saved?.id_receta ?? saved?.pk ?? saved?.uuid ?? null;
+        if (idCandidate != null) {
+          try {
+            const verify = await getRecipe(idCandidate);
+            toast.success(`Receta ${(verify?.nombre || verify?.nombre_receta || nombre || 'sin nombre')} guardada y verificada`);
+            onSave(verify || saved);
+          } catch {
+            toast.success(`Receta ${(saved?.nombre || saved?.nombre_receta || nombre || 'sin nombre')} guardada`);
+            onSave(saved);
+          }
+        } else {
+          toast.success(`Receta ${(saved?.nombre || saved?.nombre_receta || nombre || 'sin nombre')} guardada`);
+          onSave(saved);
+        }
+      } catch (err) {
+        const status = err?.response?.status;
+        const body = err?.response?.data;
+        const msg = (body && typeof body === 'object') ? JSON.stringify(body) : (body || err?.message || 'Error desconocido');
+        console.warn('Fallo al guardar en API, usando guardado local', status, msg);
+        toast.error(`No se pudo guardar en el servidor (${status || 'sin código'}). ${msg}`);
+        onSave(receta);
+      }
     };
 
     const exportWord = async () => {
