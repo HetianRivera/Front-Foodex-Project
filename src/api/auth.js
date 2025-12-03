@@ -130,18 +130,6 @@ async function obtainTokenFlexible(rut, contrasena) {
       lastError = err;
     }
   }
-  // Fallback: intentar Basic Auth para ver si el backend acepta sesión sin endpoint de token
-  try {
-    console.debug('[auth] intentando fallback Basic Auth');
-    const basic = typeof btoa === 'function' ? btoa(`${rut}:${contrasena}`) : Buffer.from(`${rut}:${contrasena}`).toString('base64');
-    api.defaults.headers.common['Authorization'] = `Basic ${basic}`;
-    const probe = await api.get('/api/v1/usuarios/');
-    console.debug('[auth] Basic Auth acceso usuarios status:', probe.status);
-    return { user: Array.isArray(probe.data) ? probe.data[0] : probe.data };
-  } catch (e) {
-    console.warn('[auth] fallo fallback Basic Auth:', e?.response?.status, e?.response?.data || e.message);
-    delete api.defaults.headers.common['Authorization'];
-  }
   throw lastError || new Error('No se pudo obtener token');
 }
 
@@ -166,18 +154,6 @@ async function obtainTokenFlexibleUsername(username, password, extra = {}) {
         lastError = err;
       }
     }
-  }
-  // Fallback Basic Auth usando username:password
-  try {
-    console.debug('[auth] intentando fallback Basic Auth (username)');
-    const basic = typeof btoa === 'function' ? btoa(`${username}:${password}`) : Buffer.from(`${username}:${password}`).toString('base64');
-    api.defaults.headers.common['Authorization'] = `Basic ${basic}`;
-    const probe = await api.get('/api/v1/usuarios/');
-    console.debug('[auth] Basic Auth acceso usuarios status:', probe.status);
-    return { user: Array.isArray(probe.data) ? probe.data[0] : probe.data };
-  } catch (e) {
-    console.warn('[auth] fallo fallback Basic Auth (username):', e?.response?.status, e?.response?.data || e.message);
-    delete api.defaults.headers.common['Authorization'];
   }
   throw lastError || new Error('No se pudo obtener token');
 }
@@ -219,41 +195,26 @@ function guessEmailFromUsername(username) {
 }
 
 async function getCurrentUserFlexible() {
-  const candidates = [
-    '/api/v1/usuarios/me/',
-    '/api/v1/users/me/',
-    '/users/me/',
-    '/api/users/me/',
-    '/auth/users/me/',
-  ];
-  for (const ep of candidates) {
-    try {
-      const r = await api.get(ep);
-      if (r?.data) return r.data;
-    } catch {}
-  }
-  // Fallback: decodificar JWT para obtener user_id y consultar por id
+  // Evitar todas las consultas GET a endpoints /me o /usuarios/{id}
+  // Solo decodificar el JWT si existe y devolver un perfil mínimo
   try {
     const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('foodex_token') : null;
     const payload = decodeJwtPayload(token);
-    const uid = payload?.user_id || payload?.id || payload?.uid || null;
-    if (uid != null) {
-      const id = encodeURIComponent(uid);
-      const byIdCandidates = [
-        `/api/v1/usuarios/${id}/`,
-        `/api/v1/users/${id}/`,
-        `/usuarios/${id}/`,
-        `/users/${id}/`,
-      ];
-      for (const ep of byIdCandidates) {
-        try {
-          const r = await api.get(ep);
-          if (r?.data) return r.data;
-        } catch {}
-      }
+    if (payload) {
+      const uid = payload.user_id ?? payload.id ?? payload.uid ?? null;
+      return {
+        id_usuario: uid,
+        nombre: payload.nombre ?? payload.name ?? '',
+        apellido: payload.apellido ?? '',
+        rut: payload.rut ?? undefined,
+        correo_electronico: payload.correo_electronico ?? payload.email ?? '',
+        estado: true,
+        roles: [],
+      };
     }
   } catch {}
-  throw new Error('Perfil no disponible');
+  // Si no hay payload, devolver null para que el caller maneje el caso sin GETs
+  return null;
 }
 
 async function findUsuarioByUsername(username) {
