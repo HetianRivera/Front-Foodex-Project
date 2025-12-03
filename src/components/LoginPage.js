@@ -4,7 +4,7 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { User, KeyRound } from 'lucide-react';
 import Logo from '../imports/Logo1';
-import { loginWithUsername } from '../api/auth';
+import { loginWithTokenEndpoint } from '../api/auth';
 
 export function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -24,7 +24,7 @@ export function LoginPage({ onLogin }) {
     if (!password || password.length < 4) { setPasswordError('Ingresa tu contraseña'); return; }
     try {
       // Autenticación real contra backend con username+password
-      const resp = await loginWithUsername(username.trim(), password, { contrasena: password });
+      const resp = await loginWithTokenEndpoint(username.trim(), password);
       const u = resp?.user || {};
       const roleFromApi = Array.isArray(u.roles) ? (u.roles.includes('profesor') ? 'profesor' : 'alumno') : undefined;
       const role = selectedRole || roleFromApi || 'alumno';

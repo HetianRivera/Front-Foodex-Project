@@ -35,6 +35,22 @@ export async function loginRut(rut, role) {
   return data;
 }
 
+export async function loginWithTokenEndpoint(correoElectronico, contrasena) {
+  const resp = await api.post(
+    '/api/token/',
+    { username: correoElectronico, password: contrasena },
+    { withCredentials: false }
+  );
+  const tokenData = resp.data || {};
+  if (tokenData?.access) {
+    setAuthToken(tokenData.access);
+    try { localStorage.setItem('foodex_token', tokenData.access); } catch {}
+  }
+  const user = await getCurrentUserFlexible().catch(() => null);
+  normalizeAndStoreUser(user, { rut: correoElectronico });
+  return { ...tokenData, user };
+}
+
 export function clearAuth() {
   try { localStorage.removeItem('foodex_token'); } catch {}
   try { localStorage.removeItem('foodex_user'); } catch {}
