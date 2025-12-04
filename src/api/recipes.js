@@ -30,22 +30,39 @@ function todayISO() {
   return `${y}-${m}-${day}`;
 }
 
+function getYearOrDefault() {
+  const envYear = getIntEnv('REACT_APP_ANIO');
+  if (envYear && envYear > 0) return envYear;
+  // Por requerimiento del backend, anio debe ser entero. Valor por defecto: 2025.
+  return 2025;
+}
+
 // Map UI recipe object -> backend schema for POST /api/v1/recetas/
 function toBackendRecipePayload(recipe) {
   const userId = getUserId();
-  const semestreId = getIntEnvOr('REACT_APP_SEMESTRE_ID', 1);
-  const tallerId = getIntEnvOr('REACT_APP_TALLER_ID', 1);
   if (!userId) throw new Error('No se pudo determinar id_usuario (no hay sesión)');
-  return {
+  const base = {
     nombre_receta: (recipe?.nombre || '').toString().trim() || 'Sin nombre',
     codigo_receta: (recipe?.codigo || '').toString().trim() || null,
-    anio: todayISO(),
+    anio: getYearOrDefault(),
     detalle_montaje: recipe?.montaje || null,
     estado: true,
-    id_taller: tallerId,
-    id_semestre: semestreId,
     id_usuario: userId,
   };
+  // Temporalmente NO incluir id_taller e id_semestre para evitar 500 del backend
+  // Cuando el backend esté corregido, se pueden reactivar vía variables de entorno:
+  // REACT_APP_INCLUDE_TALLER=true y REACT_APP_INCLUDE_SEMESTRE=true
+  const includeTaller = String(process.env.REACT_APP_INCLUDE_TALLER || 'false').toLowerCase() === 'true';
+  // id_semestre es obligatorio según el esquema; incluirlo siempre
+  const includeSemestre = true;
+  if (includeTaller) {
+    const tallerId = getIntEnvOr('REACT_APP_TALLER_ID', 1);
+    base.id_taller = tallerId;
+  }
+  // Incluir id_semestre obligatoriamente (usar env o 1 por defecto)
+  const semestreId = getIntEnvOr('REACT_APP_SEMESTRE_ID', 1);
+  base.id_semestre = semestreId;
+  return base;
 }
 
 // Flexible endpoints for recipe management (SPA -> Django/DRF or Node)
@@ -70,6 +87,83 @@ const CANDIDATE_BASES = [
 ].filter(Boolean).map(b => b.replace(/\/+$/, '/') );
 
 let resolvedBase = null;
+// --- Prefetch helpers for unidades y categorias ---
+let unidadMapCache = null; // nombre_unidad (lower) -> id_unidad
+let categoriaMapCache = null; // nombre_categoria (lower) -> id_categoria
+
+async function prefetchUnidades() {
+  if (unidadMapCache) return unidadMapCache;
+  const candidates = ['/api/v1/unidad-ingrediente/', '/unidad-ingrediente/', '/api/v1/unidades/', '/unidades/'];
+  for (const url of candidates) {
+    try {
+      const r = await api.get(url);
+      const list = Array.isArray(r.data) ? r.data : (r.data?.results || []);
+      unidadMapCache = {};
+      list.forEach(u => {
+        const name = (u.nombre_unidad || u.nombre || '').toString().trim().toLowerCase();
+        const id = u.id_unidad ?? u.id ?? null;
+        if (name && id != null) unidadMapCache[name] = id;
+      });
+      return unidadMapCache;
+    } catch {}
+  }
+  unidadMapCache = {};
+  return unidadMapCache;
+}
+
+async function ensureUnidad(nombre) {
+  const map = await prefetchUnidades();
+  const key = String(nombre || '').toLowerCase();
+  if (map[key] != null) return map[key];
+  // Intentar crear unidad si no existe
+  const createCandidates = ['/api/v1/unidad-ingrediente/', '/unidad-ingrediente/', '/api/v1/unidades/', '/unidades/'];
+  for (const url of createCandidates) {
+    try {
+      const payload = { nombre_unidad: nombre };
+      const r = await api.post(url, payload);
+      const id = r.data?.id_unidad ?? r.data?.id ?? null;
+      if (id != null) { map[key] = id; return id; }
+    } catch {}
+  }
+  return null;
+}
+
+async function prefetchCategorias() {
+  if (categoriaMapCache) return categoriaMapCache;
+  const candidates = ['/api/v1/categoria-ingrediente/', '/categoria-ingrediente/', '/api/v1/categorias/', '/categorias/'];
+  for (const url of candidates) {
+    try {
+      const r = await api.get(url);
+      const list = Array.isArray(r.data) ? r.data : (r.data?.results || []);
+      categoriaMapCache = {};
+      list.forEach(c => {
+        const name = (c.nombre_categoria || c.nombre || '').toString().trim().toLowerCase();
+        const id = c.id_categoria ?? c.id ?? null;
+        if (name && id != null) categoriaMapCache[name] = id;
+      });
+      return categoriaMapCache;
+    } catch {}
+  }
+  categoriaMapCache = {};
+  return categoriaMapCache;
+}
+
+async function ensureCategoria(nombre) {
+  const map = await prefetchCategorias();
+  const key = String(nombre || '').toLowerCase();
+  if (map[key] != null) return map[key];
+  // Intentar crear categoría si no existe
+  const createCandidates = ['/api/v1/categoria-ingrediente/', '/categoria-ingrediente/', '/api/v1/categorias/', '/categorias/'];
+  for (const url of createCandidates) {
+    try {
+      const payload = { nombre_categoria: nombre };
+      const r = await api.post(url, payload);
+      const id = r.data?.id_categoria ?? r.data?.id ?? null;
+      if (id != null) { map[key] = id; return id; }
+    } catch {}
+  }
+  return null;
+}
 
 async function tryRequestOverCandidates(method, makePath, dataOrConfig) {
   let lastErr;
@@ -116,4 +210,160 @@ export async function updateRecipe(id, patch) {
 export async function deleteRecipe(id) {
   const idSeg = `${encodeURIComponent(id)}/`;
   return tryRequestOverCandidates('delete', () => idSeg, {});
+}
+
+// --- Extended creation to persist related entities aligned with API ---
+
+const RELATED_ENDPOINTS = {
+  etapas: ['/api/v1/etapas/', '/etapas/'],
+  ingredientes: ['/api/v1/ingredientes/', '/ingredientes/'],
+  tecnicas: ['/api/v1/tecnicas/', '/tecnicas/'],
+  recetaEtapas: [
+    '/api/v1/receta-etapas/',
+    '/api/v1/receta_etapas/',
+    '/receta-etapas/',
+    '/receta_etapas/',
+    '/recetas/etapas/'
+  ],
+  recetaIngredientes: [
+    '/api/v1/receta-ingredientes/',
+    '/api/v1/receta_ingredientes/',
+    '/receta-ingredientes/',
+    '/receta_ingredientes/',
+    '/recetas/ingredientes/'
+  ],
+  etapaIngredientes: [
+    '/api/v1/etapa-ingredientes/',
+    '/api/v1/etapa_ingredientes/',
+    '/etapa-ingredientes/',
+    '/etapa_ingredientes/'
+  ],
+  ingredienteTecnica: [
+    '/api/v1/ingrediente-tecnica/',
+    '/api/v1/ingrediente_tecnica/',
+    '/ingrediente-tecnica/',
+    '/ingrediente_tecnica/'
+  ],
+};
+
+async function postOverCandidates(urls, data) {
+  let lastErr;
+  for (const u of urls) {
+    try {
+      const resp = await api.post(u, data);
+      return resp.data;
+    } catch (err) {
+      lastErr = err;
+      const status = err?.response?.status;
+      if (status && status !== 404 && status !== 405) throw err;
+    }
+  }
+  throw lastErr || new Error('No related endpoint matched');
+}
+
+export async function createFullRecipe(uiRecipe) {
+  const base = await createRecipe(uiRecipe);
+  const recetaId = base?.id_receta ?? base?.id ?? null;
+  // Persist ingredientes
+  const createdIngredientes = {};
+  const unidadAlias = { gr: 'gramos', kg: 'kilogramos', ml: 'mililitros', lt: 'litros', u: 'unidades' };
+  await prefetchUnidades();
+  await prefetchCategorias();
+  // Helper: try multiple payload variants to adapt to backend field names
+      const buildIngredientPayloadVariants = (ing, id_unidad, id_categoria) => {
+    const common = {
+      nombre: ing.nombre,
+          calorias: null,
+          tiempo_coccion_minutos: (typeof ing.tiempoCoccion === 'number' ? ing.tiempoCoccion : Number(ing.tiempoCoccion) || null),
+    };
+    return [
+      { ...common, id_categoria, id_unidad },
+      { ...common, id_categoria_id: id_categoria, id_unidad_id: id_unidad },
+      { ...common, id_categoria_ingrediente: id_categoria, id_unidad_ingrediente: id_unidad },
+      { ...common, id_categorias_ingrediente: id_categoria, id_unidades_ingrediente: id_unidad },
+    ];
+  };
+  for (const cat of (uiRecipe.ingredientes || [])) {
+    for (const ing of (cat.ingredientes || [])) {
+      const unidadName = unidadAlias[String(ing.unidad || 'gr').toLowerCase()] || String(ing.unidad || 'gr');
+      const id_unidad = await ensureUnidad(unidadName);
+      const id_categoria = await ensureCategoria(cat.categoria || 'Otros');
+      try {
+        let savedIng = null;
+        for (const variant of buildIngredientPayloadVariants(ing, id_unidad, id_categoria)) {
+          try {
+            savedIng = await postOverCandidates(RELATED_ENDPOINTS.ingredientes, variant);
+            if (savedIng) break;
+          } catch (e) {
+            const status = e?.response?.status;
+            // If not a 404/405, keep trying next variant; final failure handled by outer catch
+            if (status && (status === 404 || status === 405)) break;
+          }
+        }
+        if (!savedIng) throw new Error('No se pudo crear ingrediente (variantes fallidas)');
+        const idIng = savedIng?.id_ingrediente ?? savedIng?.id ?? null;
+        if (idIng != null) createdIngredientes[ing.nombre] = idIng;
+        if (recetaId != null && idIng != null) {
+          await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, {
+            id_receta: recetaId,
+            id_ingrediente: idIng,
+          });
+        }
+      } catch {}
+    }
+  }
+  // Persist etapas y enlaces
+  const deriveFaseEtapa = (p) => {
+    // Usar únicamente la letra base provista por la UI (A-E)
+    const raw = (p?.etapa ?? '').toString().trim().toUpperCase();
+    return /^[A-E]$/.test(raw) ? raw : 'A';
+  };
+  for (const p of (uiRecipe.procesos || [])) {
+    const etapaPayload = {
+      nombre_etapa: p.titulo || `Etapa ${p.etapa}`,
+      tiempo_minutos: Number(p.tiempoEstimado) || null,
+    };
+    let etapaId = null;
+    try {
+      const savedEtapa = await postOverCandidates(RELATED_ENDPOINTS.etapas, etapaPayload);
+      etapaId = savedEtapa?.id_etapa ?? savedEtapa?.id ?? null;
+    } catch {}
+    if (recetaId != null && etapaId != null) {
+      try {
+        await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, {
+          // Debe ser letra A,B,C,... según modelo (primary key)
+          fase_etapa: deriveFaseEtapa(p),
+          instruccion_etapa: p.descripcion || null,
+          id_receta: recetaId,
+          id_etapa: etapaId,
+        });
+      } catch {}
+    }
+    // EtapaIngredientes
+    for (const iu of (p.ingredientesUsados || [])) {
+      const idIng = createdIngredientes[iu.nombre] || null;
+      if (etapaId != null && idIng != null) {
+        try {
+          await postOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, {
+            cantidad_ingrediente: Number(iu.cantidad) || 0,
+            orden_ingrediente: null,
+            id_etapa: etapaId,
+            id_ingrediente: idIng,
+          });
+        } catch {}
+      }
+    }
+  }
+  // Técnicas (opcionales)
+  for (const t of (uiRecipe.tecnicas || [])) {
+    let tecnicaId = null;
+    try {
+      const savedTec = await postOverCandidates(RELATED_ENDPOINTS.tecnicas, {
+        nombre_tecnica: t.nombre,
+        descripcion: t.descripcion || null,
+      });
+      tecnicaId = savedTec?.id_tecnica ?? savedTec?.id ?? null;
+    } catch {}
+  }
+  return base;
 }

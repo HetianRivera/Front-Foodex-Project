@@ -96,7 +96,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
 
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant="secondary" className="text-base px-3 py-1">{recipe.categoria}</Badge>
-                    {recipe.tecnicasBase.slice(0, 2).map((tecnica, idx) => (
+                    {(Array.isArray(recipe.tecnicasBase) ? recipe.tecnicasBase.slice(0, 2) : []).map((tecnica, idx) => (
                       <Badge key={idx} variant="outline" className="text-sm px-2 py-1">
                         {tecnica}
                       </Badge>

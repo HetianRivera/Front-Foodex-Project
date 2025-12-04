@@ -10,7 +10,7 @@ import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from
 import { ChefHat, Package, AlertTriangle, Utensils } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../api/client';
-import { createRecipe, getRecipe } from '../api/recipes';
+import { createFullRecipe, getRecipe } from '../api/recipes';
 
 const CATEGORIES = ['Cárnicos','Verduras','Ovolácteos','Abarrotes','Licores','Otros'];
 const UNIDADES = ['gr','kg','ml','lt','u'];
@@ -26,8 +26,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   const [gramajePorPorcion, setGramajePorPorcion] = useState(0);
   const [tiempo, setTiempo] = useState(0);
   const [tareaInicio, setTareaInicio] = useState('');
-  const [tecnicasBaseInput, setTecnicasBaseInput] = useState('');
-  const [puntosCriticosInput, setPuntosCriticosInput] = useState('');
+  // Técnicas de base y PCC removidos (no están en la API)
   const [utensiliosInput, setUtensiliosInput] = useState('');
   const [montaje, setMontaje] = useState('');
   const [touched, setTouched] = useState({});
@@ -64,12 +63,6 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         case 'tareaInicio':
           if (!value || !value.toString().trim()) error = 'La tarea de inicio es obligatoria';
           break;
-        case 'tecnicasBaseInput':
-          if (!value || !value.toString().trim()) error = 'Debes ingresar al menos una técnica de base';
-          break;
-        case 'puntosCriticosInput':
-          if (!value || !value.toString().trim()) error = 'Debes ingresar al menos un punto crítico de control';
-          break;
         case 'utensiliosInput':
           if (!value || !value.toString().trim()) error = 'Debes ingresar al menos un utensilio necesario';
           break;
@@ -97,7 +90,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
     const addIngredient = (categoriaIndex) => {
       setIngredientesCategorias(prev => prev.map((cat,i)=> i===categoriaIndex ? {
         ...cat,
-        ingredientes: [...cat.ingredientes,{ nombre:'', cantidad:0, unidad:'gr' }]
+          ingredientes: [...cat.ingredientes,{ nombre:'', cantidad:0, unidad:'gr', tiempoCoccion: 0 }]
       } : cat));
     };
     const updateIngredient = (categoriaIndex, ingredientIndex, key, value) => {
@@ -118,29 +111,41 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       if (!ing) return;
       const nombre = (ing.nombre || '').trim();
       if (!nombre) { toast.error('Ingresa un nombre de ingrediente'); return; }
-      const toSave = { nombre, cantidad: Number(ing.cantidad) || 0, unidad: ing.unidad || 'gr', categoria: cat.categoria };
+      const toSave = { nombre, cantidad: Number(ing.cantidad) || 0, unidad: ing.unidad || 'gr', categoria: cat.categoria, tiempoCoccion: Number(ing.tiempoCoccion) || 0 };
       setSavedIngredientes(prev => {
         const idx = prev.findIndex(x => x.nombre === toSave.nombre);
         if (idx >= 0) { const copy = [...prev]; copy[idx] = { ...copy[idx], ...toSave }; return copy; }
         return [...prev, toSave];
       });
+      // bloquear edición del ingrediente hasta que se pulse "Editar"
+      setIngredientesCategorias(prev => prev.map((c,i)=> i===categoriaIndex ? {
+        ...c,
+        ingredientes: c.ingredientes.map((ingr,j)=> j===ingredientIndex ? { ...ingr, saved: true } : ingr)
+      } : c));
       toast.success('Ingrediente guardado');
     };
-    const saveIngredientes = () => {
-      const flat = ingredientesCategorias.flatMap(c => c.ingredientes.map(ing => ({ ...ing, categoria: c.categoria }))).filter(ing => (ing.nombre||'').trim());
-      if (flat.length === 0) { toast.error('No hay ingredientes para guardar'); return; }
-      setSavedIngredientes(flat);
-      toast.success(flat.length === 1 ? '1 ingrediente guardado' : `${flat.length} ingredientes guardados`);
+    const toggleEditIngrediente = (categoriaIndex, ingredientIndex) => {
+      setIngredientesCategorias(prev => prev.map((c,i)=> i===categoriaIndex ? {
+        ...c,
+        ingredientes: c.ingredientes.map((ingr,j)=> j===ingredientIndex ? { ...ingr, saved: false } : ingr)
+      } : c));
     };
 
     const addIngredienteEtapa = (etapaIndex) => {
-      setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: [...p.ingredientesUsados,{ nombre:'', cantidad:0, unidad:'gr' }] } : p));
+      setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: [...p.ingredientesUsados,{ nombre:'', cantidad:0, unidad:'gr', saved:false }] } : p));
     };
     const updateIngredienteEtapa = (etapaIndex, ingredienteIndex, key, value) => {
       setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: p.ingredientesUsados.map((ing,j)=> j===ingredienteIndex ? { ...ing, [key]: value } : ing) } : p));
     };
     const removeIngredienteEtapa = (etapaIndex, ingredienteIndex) => {
       setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: p.ingredientesUsados.filter((_,j)=> j!==ingredienteIndex) } : p));
+    };
+    const saveIngredienteEtapa = (etapaIndex, ingredienteIndex) => {
+      setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: p.ingredientesUsados.map((ing,j)=> j===ingredienteIndex ? { ...ing, saved:true } : ing) } : p));
+      toast.success('Ingrediente de etapa guardado');
+    };
+    const toggleEditIngredienteEtapa = (etapaIndex, ingredienteIndex) => {
+      setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: p.ingredientesUsados.map((ing,j)=> j===ingredienteIndex ? { ...ing, saved:false } : ing) } : p));
     };
 
     const adjustToGramaje = () => {
@@ -179,15 +184,29 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         const t = tecnicas[index];
         if (!t?.nombre?.trim() || !t?.descripcion?.trim()) return prev;
         const existingIdx = prev.findIndex(x=>x.nombre.trim().toLowerCase()===t.nombre.trim().toLowerCase());
-        const newEntry = { nombre: t.nombre.trim(), descripcion: t.descripcion.trim() };
-        if (existingIdx>=0) { const copy = [...prev]; copy[existingIdx] = newEntry; return copy; }
+        const newEntry = { nombre: t.nombre.trim(), descripcion: t.descripcion.trim(), ingredientesVinculados: [] };
+        if (existingIdx>=0) { const copy = [...prev]; copy[existingIdx] = { ...copy[existingIdx], ...newEntry }; return copy; }
         return [...prev, newEntry];
       });
       toast.success('Técnica guardada');
     };
 
     const handleSave = async () => {
-      const allFields = ['codigo','nombre','categoria','tiempo','tareaInicio','tecnicasBaseInput','puntosCriticosInput','utensiliosInput','montaje'];
+      // Validación adicional: etapas A-E únicas
+      const STAGE_SET = new Set(['A','B','C','D','E']);
+      const phases = procesos.map(p=> String(p.etapa||'').trim().toUpperCase());
+      const invalidPhases = phases.filter(ph => !STAGE_SET.has(ph));
+      const dupPhases = phases.filter((ph, idx) => phases.indexOf(ph) !== idx);
+      if (invalidPhases.length > 0) {
+        toast.error(`Etapas inválidas: ${invalidPhases.join(', ')}. Deben ser letras A-E.`);
+        return;
+      }
+      if (dupPhases.length > 0) {
+        const uniqDup = Array.from(new Set(dupPhases));
+        toast.error(`Etapas duplicadas: ${uniqDup.join(', ')}. Cada letra A-E debe ser única.`);
+        return;
+      }
+      const allFields = ['codigo','nombre','categoria','tiempo','tareaInicio','utensiliosInput','montaje'];
       const newTouched = {}; allFields.forEach(field => newTouched[field] = true); setTouched(newTouched);
 
       let newErrors = {};
@@ -199,8 +218,12 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         if (!tareaInicio) newErrors.tareaInicio = 'La tarea de inicio es obligatoria';
         if (!ingredientesCategorias.some(cat => cat.ingredientes.length > 0)) newErrors.ingredientes = 'Debes agregar al menos un ingrediente';
         if (!procesos.some(p => p.titulo.trim() && p.descripcion.trim() && p.tiempoEstimado)) newErrors.procesos = 'Debes completar al menos una etapa con título, tiempo y descripción';
-        if (!tecnicasBaseInput.trim()) newErrors.tecnicasBaseInput = 'Debes ingresar al menos una técnica de base';
-        if (!puntosCriticosInput.trim()) newErrors.puntosCriticosInput = 'Debes ingresar al menos un punto crítico de control';
+        // Validación UI: asegurar letras A-E únicas
+        const phases2 = procesos.map(p=> String(p.etapa||'').trim().toUpperCase());
+        const invalidPhases2 = phases2.filter(ph => !STAGE_SET.has(ph));
+        const dupPhases2 = phases2.filter((ph, idx) => phases2.indexOf(ph) !== idx);
+        if (invalidPhases2.length > 0) newErrors.procesos = 'Las etapas deben ser letras A-E';
+        if (dupPhases2.length > 0) newErrors.procesos = 'No puedes repetir letras de etapa (A-E)';
         if (!utensiliosInput.trim()) newErrors.utensiliosInput = 'Debes ingresar al menos un utensilio necesario';
         if (!montaje.trim()) newErrors.montaje = 'Debes ingresar el montaje final';
         setErrors(newErrors);
@@ -209,7 +232,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
 
       const ingredientesFinal = ingredientesCategorias.map(cat => ({
         categoria: cat.categoria,
-        ingredientes: cat.ingredientes.map(ing => ({ nombre: ing.nombre, cantidad: Number(ing.cantidad)||0, unidad: ing.unidad }))
+        ingredientes: cat.ingredientes.map(ing => ({ nombre: ing.nombre, cantidad: Number(ing.cantidad)||0, unidad: ing.unidad, tiempoCoccion: Number(ing.tiempoCoccion)||0 }))
       }));
       const receta = {
         id: Date.now().toString(),
@@ -223,21 +246,20 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         tareaInicio: tareaInicio||'',
         ingredientes: ingredientesFinal,
         procesos: procesos.map(p => ({
-          etapa: p.etapa,
+          etapa: String(p.etapa||'').trim().toUpperCase(),
           titulo: p.titulo,
           descripcion: p.descripcion,
           ingredientesUsados: p.ingredientesUsados.map(i=> ({ ...i, cantidad: Number(i.cantidad)||0 })),
           tiempoEstimado: Number(p.tiempoEstimado)||0
         })),
         tecnicas: savedTecnicas.filter(t=> t.nombre.trim()),
-        tecnicasBase: (tecnicasBaseInput || '').split('\n').map(t=>t.trim()).filter(Boolean),
-        puntosCriticos: (puntosCriticosInput || '').split('\n').map(t=>t.trim()).filter(Boolean),
+        // Campos removidos: tecnicasBase y puntosCriticos
         utensilios: (utensiliosInput || '').split('\n').map(t=>t.trim()).filter(Boolean),
         montaje,
         gramajePorPorcion: Number(gramajePorPorcion)||0
       };
       try {
-        const saved = await createRecipe(receta);
+        const saved = await createFullRecipe(receta);
         const idCandidate = saved?.id ?? saved?.id_receta ?? saved?.pk ?? saved?.uuid ?? null;
         if (idCandidate != null) {
           try {
@@ -346,16 +368,8 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
           </div>
         </DashboardHeader>
         <div className="max-w-7xl mx-auto space-y-6 p-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4 h-auto gap-2 bg-slate-200 p-2">
-              <TabsTrigger value="general" className="text-lg py-5 data-[state=active]:bg-white"><ChefHat className="w-6 h-6 mr-2" />General</TabsTrigger>
-              <TabsTrigger value="ingredientes" className="text-lg py-5 data-[state=active]:bg-white"><Package className="w-6 h-6 mr-2" />Ingredientes</TabsTrigger>
-              <TabsTrigger value="proceso" className="text-lg py-5 data-[state=active]:bg-white"><ChefHat className="w-6 h-6 mr-2" />Proceso</TabsTrigger>
-              <TabsTrigger value="tecnicas" className="text-lg py-5 data-[state=active]:bg-white"><AlertTriangle className="w-6 h-6 mr-2" />Técnicas/PCC</TabsTrigger>
-              <TabsTrigger value="montaje" className="text-lg py-5 data-[state=active]:bg-white"><Utensils className="w-6 h-6 mr-2" />Montaje</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="general" className="space-y-6">
+          {/* Sección: General */}
+          <div className="space-y-6">
               <Card>
                 <CardHeader><CardTitle>Datos Generales</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-3 gap-4">
@@ -404,15 +418,15 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
+          </div>
 
-            <TabsContent value="ingredientes" className="space-y-6">
+          {/* Sección: Ingredientes */}
+          <div className="space-y-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>Ingredientes por Categoría</CardTitle>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={adjustToGramaje}>Ajustar a Gramaje</Button>
-                    <Button variant="secondary" onClick={saveIngredientes}>Guardar todos</Button>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-8">
@@ -425,23 +439,31 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                       </div>
                       <div className="space-y-3">
                         {cat.ingredientes.map((ing, ii) => (
-                          <div key={ii} className="grid grid-cols-6 gap-2 items-end">
+                          <div key={ii} className="grid grid-cols-7 gap-2 items-end">
                             <div className="col-span-2">
                               <label className="block mb-1">Nombre</label>
-                              <Input value={ing.nombre} onChange={e=>updateIngredient(ci,ii,'nombre',e.target.value)} />
+                              <Input value={ing.nombre} onChange={e=>updateIngredient(ci,ii,'nombre',e.target.value)} disabled={!!ing.saved} />
                             </div>
                             <div>
                               <label className="block mb-1">Cantidad</label>
-                              <Input type="number" min={0} value={ing.cantidad} onChange={e=>updateIngredient(ci,ii,'cantidad',e.target.value)} />
+                              <Input type="number" min={0} value={ing.cantidad} onChange={e=>updateIngredient(ci,ii,'cantidad',e.target.value)} disabled={!!ing.saved} />
                             </div>
                             <div>
                               <label className="block mb-1">Unidad</label>
-                              <select className="w-full border rounded px-2 py-2" value={ing.unidad} onChange={e=>updateIngredient(ci,ii,'unidad',e.target.value)}>
+                              <select className="w-full border rounded px-2 py-2" value={ing.unidad} onChange={e=>updateIngredient(ci,ii,'unidad',e.target.value)} disabled={!!ing.saved}>
                                 {UNIDADES.map(u=> <option key={u} value={u}>{u}</option>)}
                               </select>
                             </div>
+                            <div>
+                              <label className="block mb-1">Tiempo cocción (min)</label>
+                              <Input type="number" min={0} value={ing.tiempoCoccion || 0} onChange={e=>updateIngredient(ci,ii,'tiempoCoccion',e.target.value)} disabled={!!ing.saved} />
+                            </div>
                             <div className="flex gap-2 justify-end">
-                              <Button size="sm" onClick={()=>saveIngrediente(ci,ii)}>Guardar</Button>
+                              {!ing.saved ? (
+                                <Button size="sm" onClick={()=>saveIngrediente(ci,ii)}>Guardar</Button>
+                              ) : (
+                                <Button variant="secondary" size="sm" onClick={()=>toggleEditIngrediente(ci,ii)}>Editar</Button>
+                              )}
                               <Button variant="destructive" size="sm" onClick={()=>removeIngredient(ci,ii)}>Eliminar</Button>
                             </div>
                           </div>
@@ -452,9 +474,10 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                   ))}
                 </CardContent>
               </Card>
-            </TabsContent>
+          </div>
 
-            <TabsContent value="proceso" className="space-y-6">
+          {/* Sección: Proceso */}
+          <div className="space-y-6">
               <Card>
                 <CardHeader><CardTitle>Etapas A - E</CardTitle></CardHeader>
                 <CardContent className="space-y-8">
@@ -490,25 +513,30 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                                     if(selected){
                                       updateIngredienteEtapa(pi,ii,'nombre',selected.nombre);
                                       updateIngredienteEtapa(pi,ii,'unidad',selected.unidad);
-                                    }}}>
+                                    }}} disabled={!!iu.saved}>
                                     <option value="">Seleccionar...</option>
                                     {savedIngredientes.map((ing,idx)=> <option key={idx} value={ing.nombre}>{ing.nombre} ({ing.categoria})</option>)}
                                   </select>
                                 ) : (
-                                  <Input value={iu.nombre} onChange={e=>updateIngredienteEtapa(pi,ii,'nombre',e.target.value)} placeholder="Primero guarda ingredientes" />
+                                  <Input value={iu.nombre} onChange={e=>updateIngredienteEtapa(pi,ii,'nombre',e.target.value)} placeholder="Primero guarda ingredientes" disabled={!!iu.saved} />
                                 )}
                               </div>
                               <div>
                                 <label className="block mb-1">Cantidad</label>
-                                <Input type="number" min={0} value={iu.cantidad} onChange={e=>updateIngredienteEtapa(pi,ii,'cantidad',e.target.value)} />
+                                <Input type="number" min={0} value={iu.cantidad} onChange={e=>updateIngredienteEtapa(pi,ii,'cantidad',e.target.value)} disabled={!!iu.saved} />
                               </div>
                               <div>
                                 <label className="block mb-1">Unidad</label>
-                                <select className="w-full border rounded px-2 py-2" value={iu.unidad} onChange={e=>updateIngredienteEtapa(pi,ii,'unidad',e.target.value)}>
+                                <select className="w-full border rounded px-2 py-2" value={iu.unidad} onChange={e=>updateIngredienteEtapa(pi,ii,'unidad',e.target.value)} disabled={!!iu.saved}>
                                   {UNIDADES.map(u=> <option key={u} value={u}>{u}</option>)}
                                 </select>
                               </div>
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 justify-end">
+                                {!iu.saved ? (
+                                  <Button size="sm" onClick={()=>saveIngredienteEtapa(pi,ii)}>Guardar</Button>
+                                ) : (
+                                  <Button variant="secondary" size="sm" onClick={()=>toggleEditIngredienteEtapa(pi,ii)}>Editar</Button>
+                                )}
                                 <Button variant="destructive" size="sm" onClick={()=>removeIngredienteEtapa(pi,ii)}>Eliminar</Button>
                               </div>
                             </div>
@@ -520,9 +548,10 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                   ))}
                 </CardContent>
               </Card>
-            </TabsContent>
+          </div>
 
-            <TabsContent value="tecnicas" className="space-y-6">
+          {/* Sección: Técnicas/PCC */}
+          <div className="space-y-6">
               <Card>
                 <CardHeader className="flex items-center justify-between"><CardTitle>Técnicas</CardTitle>
                   <Button size="sm" variant="secondary" onClick={addTecnica}>Agregar Técnica</Button>
@@ -543,6 +572,23 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                           <label className="block mb-1">Descripción</label>
                           <Textarea rows={4} value={t.descripcion} onChange={e=>updateTecnica(idx,'descripcion',e.target.value)} />
                           {t.saved && <p className="text-xs text-green-600 mt-1">Guardada</p>}
+                          {savedIngredientes.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-sm text-slate-600">Vincular ingredientes:</p>
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {savedIngredientes.map((ing, iidx)=> (
+                                  <Button key={iidx} variant="outline" size="sm" onClick={()=>{
+                                    setSavedTecnicas(prev => prev.map((st, si)=> si===idx ? {
+                                      ...st,
+                                      ingredientesVinculados: Array.from(new Set([...(st.ingredientesVinculados||[]), ing.nombre]))
+                                    } : st));
+                                  }}>
+                                    {ing.nombre}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -556,29 +602,16 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader><CardTitle>Técnicas de Base</CardTitle></CardHeader>
-                <CardContent>
-                  <Textarea rows={6} value={tecnicasBaseInput} placeholder="Una por línea" onChange={e => handleChange('tecnicasBaseInput', e.target.value, setTecnicasBaseInput)} onBlur={e => handleBlur('tecnicasBaseInput', e.target.value)} />
-                  {touched.tecnicasBaseInput && errors.tecnicasBaseInput && (<span className="text-red-500 text-sm block mt-2">{errors.tecnicasBaseInput}</span>)}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader><CardTitle>Puntos Críticos de Control (PCC)</CardTitle></CardHeader>
-                <CardContent>
-                  <Textarea rows={6} value={puntosCriticosInput} placeholder="Uno por línea" onChange={e => handleChange('puntosCriticosInput', e.target.value, setPuntosCriticosInput)} onBlur={e => handleBlur('puntosCriticosInput', e.target.value)} />
-                  {touched.puntosCriticosInput && errors.puntosCriticosInput && (<span className="text-red-500 text-sm block mt-2">{errors.puntosCriticosInput}</span>)}
-                </CardContent>
-              </Card>
-              <Card>
                 <CardHeader><CardTitle>Utensilios Necesarios</CardTitle></CardHeader>
                 <CardContent>
                   <Textarea rows={4} value={utensiliosInput} placeholder="Uno por línea" onChange={e => handleChange('utensiliosInput', e.target.value, setUtensiliosInput)} onBlur={e => handleBlur('utensiliosInput', e.target.value)} />
                   {touched.utensiliosInput && errors.utensiliosInput && (<span className="text-red-500 text-sm block mt-2">{errors.utensiliosInput}</span>)}
                 </CardContent>
               </Card>
-            </TabsContent>
+          </div>
 
-            <TabsContent value="montaje" className="space-y-6">
+          {/* Sección: Montaje */}
+          <div className="space-y-6">
               <Card>
                 <CardHeader><CardTitle>Montaje Final</CardTitle></CardHeader>
                 <CardContent>
@@ -586,8 +619,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                   {touched.montaje && errors.montaje && (<span className="text-red-500 text-sm block mt-2">{errors.montaje}</span>)}
                 </CardContent>
               </Card>
-            </TabsContent>
-          </Tabs>
+          </div>
         </div>
         <DashboardFooter />
       </div>
