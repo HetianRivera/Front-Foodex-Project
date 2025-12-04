@@ -93,7 +93,10 @@ let categoriaMapCache = null; // nombre_categoria (lower) -> id_categoria
 
 async function prefetchUnidades() {
   if (unidadMapCache) return unidadMapCache;
-  const candidates = ['/api/v1/unidad-ingrediente/', '/unidad-ingrediente/', '/api/v1/unidades/', '/unidades/'];
+  const candidates = [
+    // Confirmado por el backend: /api/v1/unidades/
+    '/api/v1/unidades/'
+  ];
   for (const url of candidates) {
     try {
       const r = await api.get(url);
@@ -116,7 +119,10 @@ async function ensureUnidad(nombre) {
   const key = String(nombre || '').toLowerCase();
   if (map[key] != null) return map[key];
   // Intentar crear unidad si no existe
-  const createCandidates = ['/api/v1/unidad-ingrediente/', '/unidad-ingrediente/', '/api/v1/unidades/', '/unidades/'];
+  const createCandidates = [
+    // Confirmado por el backend: /api/v1/unidades/
+    '/api/v1/unidades/'
+  ];
   for (const url of createCandidates) {
     try {
       const payload = { nombre_unidad: nombre };
@@ -130,7 +136,10 @@ async function ensureUnidad(nombre) {
 
 async function prefetchCategorias() {
   if (categoriaMapCache) return categoriaMapCache;
-  const candidates = ['/api/v1/categoria-ingrediente/', '/categoria-ingrediente/', '/api/v1/categorias/', '/categorias/'];
+  const candidates = [
+    // Confirmado por el backend: /api/v1/categorias/
+    '/api/v1/categorias/'
+  ];
   for (const url of candidates) {
     try {
       const r = await api.get(url);
@@ -153,7 +162,10 @@ async function ensureCategoria(nombre) {
   const key = String(nombre || '').toLowerCase();
   if (map[key] != null) return map[key];
   // Intentar crear categoría si no existe
-  const createCandidates = ['/api/v1/categoria-ingrediente/', '/categoria-ingrediente/', '/api/v1/categorias/', '/categorias/'];
+  const createCandidates = [
+    // Confirmado por el backend: /api/v1/categorias/
+    '/api/v1/categorias/'
+  ];
   for (const url of createCandidates) {
     try {
       const payload = { nombre_categoria: nombre };
@@ -171,12 +183,21 @@ async function tryRequestOverCandidates(method, makePath, dataOrConfig) {
   for (const base of bases) {
     try {
       const path = base.replace(/\/+$/, '/') + makePath(base);
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+        console.log(`[API] ${method.toUpperCase()} ${path}`, method === 'get' ? { params: dataOrConfig } : dataOrConfig);
+      }
       const resp = await api.request({ method, url: path, ...(method === 'get' ? { params: dataOrConfig } : { data: dataOrConfig }) });
       resolvedBase = base; // cache success
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+        console.log(`[API] OK ${method.toUpperCase()} ${path}`, resp.status);
+      }
       return resp.data;
     } catch (err) {
       lastErr = err;
       const status = err?.response?.status;
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+        console.warn(`[API] ERR ${method.toUpperCase()} ${base} ->`, status, err?.response?.data);
+      }
       // Si el endpoint existe pero el payload es inválido o hay auth (400/401/403),
       // no probar otros bases: la ruta correcta es esta. Cachear y salir.
       if (status && status !== 404 && status !== 405) {
@@ -250,11 +271,20 @@ async function postOverCandidates(urls, data) {
   let lastErr;
   for (const u of urls) {
     try {
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+        console.log('[API] POST', u, data);
+      }
       const resp = await api.post(u, data);
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+        console.log('[API] OK POST', u, resp.status);
+      }
       return resp.data;
     } catch (err) {
       lastErr = err;
       const status = err?.response?.status;
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+        console.warn('[API] ERR POST', u, status, err?.response?.data);
+      }
       if (status && status !== 404 && status !== 405) throw err;
     }
   }
@@ -273,8 +303,7 @@ export async function createFullRecipe(uiRecipe) {
       const buildIngredientPayloadVariants = (ing, id_unidad, id_categoria) => {
     const common = {
       nombre: ing.nombre,
-          calorias: null,
-          tiempo_coccion_minutos: (typeof ing.tiempoCoccion === 'number' ? ing.tiempoCoccion : Number(ing.tiempoCoccion) || null),
+      // Retirar campos no existentes en BD: tiempo_coccion_minutos y calorias
     };
     return [
       { ...common, id_categoria, id_unidad },
@@ -292,6 +321,9 @@ export async function createFullRecipe(uiRecipe) {
         let savedIng = null;
         for (const variant of buildIngredientPayloadVariants(ing, id_unidad, id_categoria)) {
           try {
+            if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+              console.log('[API] TRY ingrediente payload', variant);
+            }
             savedIng = await postOverCandidates(RELATED_ENDPOINTS.ingredientes, variant);
             if (savedIng) break;
           } catch (e) {
@@ -304,10 +336,24 @@ export async function createFullRecipe(uiRecipe) {
         const idIng = savedIng?.id_ingrediente ?? savedIng?.id ?? null;
         if (idIng != null) createdIngredientes[ing.nombre] = idIng;
         if (recetaId != null && idIng != null) {
-          await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, {
-            id_receta: recetaId,
-            id_ingrediente: idIng,
-          });
+          // Variantes para fk en RecetaIngrediente: algunos backends esperan *_id
+          const recetaIngredienteVariants = [
+            { id_receta: recetaId, id_ingrediente: idIng },
+            { id_receta_id: recetaId, id_ingrediente_id: idIng },
+          ];
+          let linked = false;
+          for (const v of recetaIngredienteVariants) {
+            try {
+              if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+                console.log('[API] TRY receta-ingrediente payload', v);
+              }
+              await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, v); linked = true; break; }
+            catch (e) {
+              const st = e?.response?.status;
+              if (st && (st === 404 || st === 405)) break;
+            }
+          }
+          if (!linked) throw new Error('No se pudo vincular ingrediente a receta');
         }
       } catch {}
     }
@@ -318,7 +364,11 @@ export async function createFullRecipe(uiRecipe) {
     const raw = (p?.etapa ?? '').toString().trim().toUpperCase();
     return /^[A-E]$/.test(raw) ? raw : 'A';
   };
-  for (const p of (uiRecipe.procesos || [])) {
+  // Asegurar unicidad de fase_etapa por receta: si se repite, asignar la siguiente disponible
+  const allowedPhases = ['A','B','C','D','E'];
+  const usedPhases = new Set();
+  for (let i = 0; i < (uiRecipe.procesos || []).length; i++) {
+    const p = uiRecipe.procesos[i];
     const etapaPayload = {
       nombre_etapa: p.titulo || `Etapa ${p.etapa}`,
       tiempo_minutos: Number(p.tiempoEstimado) || null,
@@ -330,13 +380,34 @@ export async function createFullRecipe(uiRecipe) {
     } catch {}
     if (recetaId != null && etapaId != null) {
       try {
-        await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, {
-          // Debe ser letra A,B,C,... según modelo (primary key)
-          fase_etapa: deriveFaseEtapa(p),
+        // fase propuesta
+        let fase = deriveFaseEtapa(p);
+        if (usedPhases.has(fase)) {
+          // Buscar la siguiente disponible
+          fase = allowedPhases.find(ph => !usedPhases.has(ph)) || fase;
+        }
+        usedPhases.add(fase);
+        const baseRel = {
+          fase_etapa: fase,
           instruccion_etapa: p.descripcion || null,
-          id_receta: recetaId,
-          id_etapa: etapaId,
-        });
+          orden: i + 1,
+        };
+        const variants = [
+          { ...baseRel, id_receta: recetaId, id_etapa: etapaId },
+          { ...baseRel, id_receta_id: recetaId, id_etapa_id: etapaId },
+        ];
+        let linkedEtapa = false;
+        for (const v of variants) {
+          try {
+            await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, v);
+            linkedEtapa = true; break;
+          } catch (e) {
+            const st = e?.response?.status;
+            if (st && (st === 404 || st === 405)) break;
+            // continuar intentando siguiente variante en caso de 400
+          }
+        }
+        if (!linkedEtapa) throw new Error('No se pudo vincular receta_etapa');
       } catch {}
     }
     // EtapaIngredientes
@@ -366,4 +437,40 @@ export async function createFullRecipe(uiRecipe) {
     } catch {}
   }
   return base;
+}
+
+// --- Utilidades de enlace adicionales ---
+// Ingrediente-Técnica
+export async function linkIngredienteTecnica({ id_ingrediente, id_tecnica }) {
+  const variants = [
+    { id_ingrediente, id_tecnica },
+    { id_ingrediente_id: id_ingrediente, id_tecnica_id: id_tecnica },
+  ];
+  for (const v of variants) {
+    try { return await postOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, v); } catch (e) {
+      const st = e?.response?.status; if (st && (st === 404 || st === 405)) break;
+    }
+  }
+  throw new Error('No se pudo vincular ingrediente_tecnica');
+}
+
+// Categoria-Ingrediente (algunas APIs usan una tabla relacional explícita)
+const CATEGORIA_INGREDIENTE_ENDPOINTS = [
+  '/api/v1/categoria-ingrediente/',
+  '/api/v1/categoria_ingrediente/',
+  '/api/v1/categorias-ingredientes/',
+  '/categorias-ingredientes/',
+];
+
+export async function linkCategoriaIngrediente({ id_ingrediente, id_categoria }) {
+  const variants = [
+    { id_ingrediente, id_categoria },
+    { id_ingrediente_id: id_ingrediente, id_categoria_id: id_categoria },
+  ];
+  for (const v of variants) {
+    try { return await postOverCandidates(CATEGORIA_INGREDIENTE_ENDPOINTS, v); } catch (e) {
+      const st = e?.response?.status; if (st && (st === 404 || st === 405)) break;
+    }
+  }
+  throw new Error('No se pudo vincular categoria_ingrediente');
 }
