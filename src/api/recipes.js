@@ -22,13 +22,7 @@ function getIntEnvOr(name, fallback) {
   return val;
 }
 
-function todayISO() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
+// Utilidad de fecha eliminada por no uso para evitar lint no-unused-vars
 
 function getYearOrDefault() {
   const envYear = getIntEnv('REACT_APP_ANIO');
@@ -54,7 +48,7 @@ function toBackendRecipePayload(recipe) {
   // REACT_APP_INCLUDE_TALLER=true y REACT_APP_INCLUDE_SEMESTRE=true
   const includeTaller = String(process.env.REACT_APP_INCLUDE_TALLER || 'false').toLowerCase() === 'true';
   // id_semestre es obligatorio según el esquema; incluirlo siempre
-  const includeSemestre = true;
+  // id_semestre es obligatorio según el esquema; se incluye siempre
   if (includeTaller) {
     const tallerId = getIntEnvOr('REACT_APP_TALLER_ID', 1);
     base.id_taller = tallerId;
@@ -102,11 +96,11 @@ async function prefetchUnidades() {
       const r = await api.get(url);
       const list = Array.isArray(r.data) ? r.data : (r.data?.results || []);
       unidadMapCache = {};
-      list.forEach(u => {
+      for (const u of list) {
         const name = (u.nombre_unidad || u.nombre || '').toString().trim().toLowerCase();
         const id = u.id_unidad ?? u.id ?? null;
         if (name && id != null) unidadMapCache[name] = id;
-      });
+      }
       return unidadMapCache;
     } catch {}
   }
@@ -145,11 +139,11 @@ async function prefetchCategorias() {
       const r = await api.get(url);
       const list = Array.isArray(r.data) ? r.data : (r.data?.results || []);
       categoriaMapCache = {};
-      list.forEach(c => {
+      for (const c of list) {
         const name = (c.nombre_categoria || c.nombre || '').toString().trim().toLowerCase();
         const id = c.id_categoria ?? c.id ?? null;
         if (name && id != null) categoriaMapCache[name] = id;
-      });
+      }
       return categoriaMapCache;
     } catch {}
   }
@@ -427,13 +421,11 @@ export async function createFullRecipe(uiRecipe) {
   }
   // Técnicas (opcionales)
   for (const t of (uiRecipe.tecnicas || [])) {
-    let tecnicaId = null;
     try {
-      const savedTec = await postOverCandidates(RELATED_ENDPOINTS.tecnicas, {
+      await postOverCandidates(RELATED_ENDPOINTS.tecnicas, {
         nombre_tecnica: t.nombre,
         descripcion: t.descripcion || null,
       });
-      tecnicaId = savedTec?.id_tecnica ?? savedTec?.id ?? null;
     } catch {}
   }
   return base;
