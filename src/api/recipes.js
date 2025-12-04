@@ -381,27 +381,15 @@ export async function createFullRecipe(uiRecipe) {
           fase = allowedPhases.find(ph => !usedPhases.has(ph)) || fase;
         }
         usedPhases.add(fase);
-        const baseRel = {
+        await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, {
+          // Debe ser letra A,B,C,... según modelo (primary key)
           fase_etapa: fase,
           instruccion_etapa: p.descripcion || null,
+          id_receta: recetaId,
+          id_etapa: etapaId,
+          // Orden por defecto según posición de la lista (1-based)
           orden: i + 1,
-        };
-        const variants = [
-          { ...baseRel, id_receta: recetaId, id_etapa: etapaId },
-          { ...baseRel, id_receta_id: recetaId, id_etapa_id: etapaId },
-        ];
-        let linkedEtapa = false;
-        for (const v of variants) {
-          try {
-            await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, v);
-            linkedEtapa = true; break;
-          } catch (e) {
-            const st = e?.response?.status;
-            if (st && (st === 404 || st === 405)) break;
-            // continuar intentando siguiente variante en caso de 400
-          }
-        }
-        if (!linkedEtapa) throw new Error('No se pudo vincular receta_etapa');
+        });
       } catch {}
     }
     // EtapaIngredientes
