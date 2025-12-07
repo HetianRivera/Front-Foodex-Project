@@ -3,6 +3,6 @@ import App from './App';
 
 test('renders login heading', () => {
   render(<App />);
-  const heading = screen.getByText(/FOODEX - Taller Gastronómico/i);
+  const heading = screen.getByRole('heading', { name: /FOODEX - Taller Gastronómico/i });
   expect(heading).toBeInTheDocument();
 });

@@ -47,6 +47,7 @@ export async function loginWithTokenEndpoint(correoElectronico, contrasena) {
     try { localStorage.setItem('foodex_token', tokenData.access); } catch {}
   }
   const user = await getCurrentUserFlexible().catch(() => null);
+  await ensureAcademicEntitiesOnLogin().catch(() => {});
   normalizeAndStoreUser(user, { rut: correoElectronico });
   return { ...tokenData, user };
 }
@@ -61,13 +62,13 @@ export function clearAuth() {
 // POST /auth/login { rut, password } -> { access, refresh?, user }
 export async function loginWithPassword(rut, contrasena, extra = {}) {
   // Incluimos campos requeridos por el esquema Swagger para posible registro.
-  const basePayload = { rut, contrasena, ...extra };
   // Intento de token directo sin credenciales (evitar preflight con credentials si no son necesarias)
   const tokenData = await obtainTokenFlexible(rut, contrasena);
   if (tokenData?.access) {
     setAuthToken(tokenData.access);
     try { localStorage.setItem('foodex_token', tokenData.access); } catch {}
   }
+  await ensureAcademicEntitiesOnLogin().catch(() => {});
   normalizeAndStoreUser(tokenData?.user, { rut });
   return tokenData;
 }
@@ -81,6 +82,7 @@ export async function loginWithUsername(username, password, extra = {}) {
     try { localStorage.setItem('foodex_token', tokenData.access); } catch {}
   }
   const userRecord = await ensureUserRecord(username, tokenData?.user, extra).catch(() => tokenData?.user);
+  await ensureAcademicEntitiesOnLogin().catch(() => {});
   normalizeAndStoreUser(userRecord, { rut: undefined });
   return { ...tokenData, user: userRecord };
 }
@@ -217,10 +219,6 @@ async function getCurrentUserFlexible() {
   return null;
 }
 
-async function findUsuarioByUsername(username) {
-  // Deshabilitado para evitar 500 del backend al listar/filtrar usuarios
-  return null;
-}
 
 async function ensureUserRecord(username, tokenUser, extra = {}) {
   try {
@@ -324,4 +322,77 @@ export function getStoredSession() {
   } catch {
     return { token: null, user: null };
   }
+}
+
+// --- Post-login setup: crear Taller y Semestre por defecto y guardar IDs ---
+
+async function postOverCandidates(urls, data) {
+  let lastErr;
+  for (const u of urls) {
+    try {
+      const resp = await api.post(u, data, { withCredentials: false });
+      return resp.data;
+    } catch (err) {
+      lastErr = err;
+      const st = err?.response?.status;
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+        console.warn('[auth] POST ERR', u, st, err?.response?.data);
+      }
+      if (st && st !== 404 && st !== 405) throw err;
+    }
+  }
+  throw lastErr || new Error('No endpoint matched');
+}
+
+// computeDefaultSemestreLabel/getCurrentYear ya no se usan tras enviar semestre como entero
+
+function getSemestreNumberFromMonth() {
+  try { const m = (new Date()).getMonth() + 1; return m <= 6 ? 1 : 2; } catch { return 1; }
+}
+
+async function ensureTallerDefault() {
+  try { if (localStorage.getItem('foodex_id_taller')) return Number(localStorage.getItem('foodex_id_taller')); } catch {}
+  const defaults = { seccion_taller: 'A', detalle_taller: 'Taller por defecto', estado: true };
+  const variants = [
+    defaults,
+    { seccion: 'A', detalle: 'Taller por defecto', estado: true },
+    { nombre_taller: 'Taller por defecto', seccion_taller: 'A', estado: true },
+  ];
+  const endpoints = ['/api/v1/talleres/'];
+  for (const v of variants) {
+    try {
+      const saved = await postOverCandidates(endpoints, v);
+      const id = saved?.id_taller ?? saved?.id ?? null;
+      if (id != null) { try { localStorage.setItem('foodex_id_taller', String(id)); } catch {} return id; }
+    } catch (e) {
+      // siguiente variante
+    }
+  }
+  return null;
+}
+
+async function ensureSemestreDefault() {
+  try { if (localStorage.getItem('foodex_id_semestre')) return Number(localStorage.getItem('foodex_id_semestre')); } catch {}
+  const semNum = getSemestreNumberFromMonth();
+  // Según especificación: semestre es entero (requerido). Evitar enviar 'anio'.
+  const variants = [
+    { semestre: semNum, estado: true },
+    { semestre: semNum },
+  ];
+  const endpoints = ['/api/v1/semestres/'];
+  for (const v of variants) {
+    try {
+      const saved = await postOverCandidates(endpoints, v);
+      const id = saved?.id_semestre ?? saved?.id ?? null;
+      if (id != null) { try { localStorage.setItem('foodex_id_semestre', String(id)); } catch {} return id; }
+    } catch (e) {
+      // siguiente variante
+    }
+  }
+  return null;
+}
+
+export async function ensureAcademicEntitiesOnLogin() {
+  await ensureSemestreDefault().catch(() => null);
+  await ensureTallerDefault().catch(() => null);
 }
