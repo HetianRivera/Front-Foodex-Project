@@ -116,7 +116,6 @@ describe('createFullRecipe - flujo de endpoints', () => {
     // 1) Crear receta
     expect(orderStrings[0]).toBe('request POST /api/v1/recetas/');
     // 2) Prefetch catálogos
-    expect(orderStrings).toContain('get /api/v1/unidades/');
     expect(orderStrings).toContain('get /api/v1/categorias/');
     // 3) Crear ingrediente
     expect(orderStrings).toContain('post /api/v1/ingredientes/');

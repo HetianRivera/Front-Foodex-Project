@@ -230,31 +230,22 @@ export async function createFullRecipe(uiRecipe) {
   let base = null;
   let recetaId = null;
   let deferredMode = false;
-  const skipRecipe = String(process.env.REACT_APP_SKIP_RECIPE_CREATION || 'false').toLowerCase() === 'true';
-  if (skipRecipe) {
-    deferredMode = true;
-    recetaId = `temp-${Date.now()}`;
-    base = { id: recetaId, id_receta: recetaId, nombre_receta: uiRecipe?.nombre || 'Pendiente', _deferred: true };
-    if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-      console.warn('[API] Modo saltar receta: no se intenta POST /recetas, se usa ID temporal');
-    }
-  } else {
-    try {
-      base = await createRecipe(uiRecipe);
-      recetaId = base?.id_receta ?? base?.id ?? null;
-    } catch (err) {
-      const allowDefer = String(process.env.REACT_APP_DEFER_RECIPE_ON_ERROR || 'false').toLowerCase() === 'true';
-      const status = err?.response?.status;
-      if (allowDefer && status && status >= 500) {
-        deferredMode = true;
-        recetaId = `temp-${Date.now()}`;
-        base = { id: recetaId, id_receta: recetaId, nombre_receta: uiRecipe?.nombre || 'Pendiente', _deferred: true };
-        if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-          console.warn('[API] Modo diferido: receta temporal creada en memoria por error servidor', status);
-        }
-      } else {
-        throw err;
+  try {
+    base = await createRecipe(uiRecipe);
+    recetaId = base?.id_receta ?? base?.id ?? null;
+  } catch (err) {
+    const allowDefer = String(process.env.REACT_APP_DEFER_RECIPE_ON_ERROR || 'false').toLowerCase() === 'true';
+    const status = err?.response?.status;
+    if (allowDefer && status && status >= 500) {
+      // No usar ID temporal: continuar sin recetaId para configurar entidades independientes
+      deferredMode = true;
+      recetaId = null;
+      base = { _deferred: true, nombre_receta: uiRecipe?.nombre || null };
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+        console.warn('[API] Modo diferido: no se creó receta, se continúan entidades independientes', status);
       }
+    } else {
+      throw err;
     }
   }
 
@@ -367,15 +358,8 @@ export async function createFullRecipe(uiRecipe) {
   // 2) Ya tenemos la receta creada al inicio
 
   // Utilidades de cola de enlaces diferidos
-  const pushPendingLink = (kind, payload) => {
-    if (!deferredMode) return;
-    try {
-      const raw = localStorage.getItem('foodex_pending_links');
-      const arr = raw ? JSON.parse(raw) : [];
-      arr.push({ kind, payload, recetaId });
-      localStorage.setItem('foodex_pending_links', JSON.stringify(arr));
-    } catch {}
-  };
+  // En este modo, no se encolan enlaces dependientes de receta (sin id_receta)
+  const pushPendingLink = () => {};
 
   // 3) Enlazar receta con ingredientes
   if (recetaId != null) {
@@ -387,10 +371,7 @@ export async function createFullRecipe(uiRecipe) {
         ];
         let linked = false;
         for (const v of recetaIngredienteVariants) {
-          try {
-            if (deferredMode) { pushPendingLink('receta-ingrediente', v); linked = true; break; }
-            await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, v); linked = true; break;
-          }
+          try { await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, v); linked = true; break; }
           catch (e) { const st = e?.response?.status; if (st && (st === 404 || st === 405)) break; else throw e; }
         }
         if (!linked) throw new Error(`No se pudo vincular ingrediente a receta: ${nombreIng}`);
@@ -412,8 +393,7 @@ export async function createFullRecipe(uiRecipe) {
           id_etapa: etapaId,
           orden: et.orden,
         };
-        if (deferredMode) { pushPendingLink('receta-etapa', payloadRE); }
-        else { await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, payloadRE); }
+        await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, payloadRE);
       } catch (err) {
         throw err;
       }
