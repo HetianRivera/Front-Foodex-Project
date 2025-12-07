@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { User, KeyRound } from 'lucide-react';
-import Logo from '../imports/Logo1';
+// Removed unused icons and logo imports
 import { loginWithTokenEndpoint } from '../api/auth';
 
 export function LoginPage({ onLogin }) {

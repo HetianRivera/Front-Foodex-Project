@@ -5,19 +5,25 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Textarea } from './ui/textarea';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
-import { ChefHat, Package, AlertTriangle, Utensils } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../api/client';
-import { createFullRecipe, getRecipe } from '../api/recipes';
+import {
+  createRecipe,
+  createFullRecipe,
+  getRecipe,
+  listRecipes,
+  updateRecipe,
+  deleteRecipe,
+  linkIngredienteTecnica,
+  linkCategoriaIngrediente,
+} from '../api/recipes';
 
-const CATEGORIES = ['Cárnicos','Verduras','Ovolácteos','Abarrotes','Licores','Otros'];
+const CATEGORIES = ['Cárnicos','Verduras','Ovolácteos','Abarrotes','Licores'];
 const UNIDADES = ['gr','kg','ml','lt','u'];
 
-export function NewRecipePage({ onCancel, onSave, user, recipes }) {
+export function NewRecipePage({ onCancel, onSave, user }) {
   const RELAX = String(process.env.REACT_APP_RELAX_RECIPE_VALIDATION || process.env.REACT_APP_OFFLINE || process.env.REACT_APP_USE_MOCK || 'true').toLowerCase() === 'true';
-  const [activeTab, setActiveTab] = useState('general');
   const [codigo, setCodigo] = useState('');
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState('');
@@ -27,7 +33,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   const [tiempo, setTiempo] = useState(0);
   const [tareaInicio, setTareaInicio] = useState('');
   // Técnicas de base y PCC removidos (no están en la API)
-  const [utensiliosInput, setUtensiliosInput] = useState('');
+  // Se removió la UI de utensilios; no se mantiene estado
   const [montaje, setMontaje] = useState('');
   const [touched, setTouched] = useState({});
   const [errors, setErrors] = useState({});
@@ -43,49 +49,42 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
     const [procesos, setProcesos] = useState(
       STAGES.map(etapa => ({ etapa, titulo: '', descripcion: '', tiempoEstimado: 0, ingredientesUsados: [] }))
     );
+    // Control de UI: sólo una etapa abierta a la vez
+    const [openStageIndex, setOpenStageIndex] = useState(0);
 
-    const validateField = (fieldName, value) => {
-      if (RELAX) return '';
-      let error = '';
-      switch(fieldName) {
+    // Helpers de validación y manejo de inputs usados en onChange/onBlur
+    const validateField = (field, value) => {
+      switch (field) {
         case 'codigo':
-          if (!value || !value.toString().trim()) error = 'El código es obligatorio';
-          break;
         case 'nombre':
-          if (!value || !value.toString().trim()) error = 'El nombre es obligatorio';
-          break;
         case 'categoria':
-          if (!value || !value.toString().trim()) error = 'La categoría es obligatoria';
-          break;
-        case 'tiempo':
-          if (!value || value <= 0) error = 'El tiempo es obligatorio';
-          break;
+          return String(value || '').trim() ? '' : 'Este campo es obligatorio';
+        case 'tiempo': {
+          const n = Number(value);
+          if (!Number.isFinite(n) || n < 0) return 'Debe ser un número >= 0';
+          return '';
+        }
         case 'tareaInicio':
-          if (!value || !value.toString().trim()) error = 'La tarea de inicio es obligatoria';
-          break;
-        case 'utensiliosInput':
-          if (!value || !value.toString().trim()) error = 'Debes ingresar al menos un utensilio necesario';
-          break;
         case 'montaje':
-          if (!value || !value.toString().trim()) error = 'Debes ingresar el montaje final';
-          break;
+          return value !== undefined && value !== null && String(value).trim() === '' ? 'No deje solo espacios' : '';
+        default:
+          return '';
       }
-      return error;
     };
 
-    const handleBlur = (fieldName, value) => {
-      setTouched(prev => ({ ...prev, [fieldName]: true }));
-      const error = validateField(fieldName, value);
-      setErrors(prev => ({ ...prev, [fieldName]: error }));
-    };
-
-    const handleChange = (fieldName, value, setter) => {
+    const handleChange = (field, value, setter) => {
       setter(value);
-      if (touched[fieldName]) {
-        const error = validateField(fieldName, value);
-        setErrors(prev => ({ ...prev, [fieldName]: error }));
-      }
+      setTouched(prev => ({ ...prev, [field]: true }));
+      const err = validateField(field, value);
+      setErrors(prev => ({ ...prev, [field]: err }));
     };
+
+    const handleBlur = (field, value) => {
+      setTouched(prev => ({ ...prev, [field]: true }));
+      const err = validateField(field, value);
+      setErrors(prev => ({ ...prev, [field]: err }));
+    };
+
 
     const addIngredient = (categoriaIndex) => {
       setIngredientesCategorias(prev => prev.map((cat,i)=> i===categoriaIndex ? {
@@ -175,7 +174,12 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
       })));
     };
 
-    const addTecnica = () => { setTecnicas(prev => [...prev, { nombre: '', descripcion: '', saved: false }]); };
+    const addTecnica = () => {
+      setTecnicas(prev => {
+        if (prev.length >= 1) { toast.error('Solo se permite una técnica'); return prev; }
+        return [...prev, { nombre: '', descripcion: '', saved: false }];
+      });
+    };
     const updateTecnica = (index, key, value) => { setTecnicas(prev => prev.map((t,i)=> i===index ? { ...t, [key]: value } : t)); };
     const removeTecnica = (index) => { setTecnicas(prev => prev.filter((_,i)=> i!==index)); };
     const saveTecnica = (index) => {
@@ -206,7 +210,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         toast.error(`Etapas duplicadas: ${uniqDup.join(', ')}. Cada letra A-E debe ser única.`);
         return;
       }
-      const allFields = ['codigo','nombre','categoria','tiempo','tareaInicio','utensiliosInput','montaje'];
+      const allFields = ['codigo','nombre','categoria','tiempo','tareaInicio','montaje'];
       const newTouched = {}; allFields.forEach(field => newTouched[field] = true); setTouched(newTouched);
 
       let newErrors = {};
@@ -224,7 +228,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
         const dupPhases2 = phases2.filter((ph, idx) => phases2.indexOf(ph) !== idx);
         if (invalidPhases2.length > 0) newErrors.procesos = 'Las etapas deben ser letras A-E';
         if (dupPhases2.length > 0) newErrors.procesos = 'No puedes repetir letras de etapa (A-E)';
-        if (!utensiliosInput.trim()) newErrors.utensiliosInput = 'Debes ingresar al menos un utensilio necesario';
+        // Se elimina la validación de utensilios al quitar la UI
         if (!montaje.trim()) newErrors.montaje = 'Debes ingresar el montaje final';
         setErrors(newErrors);
         if (Object.keys(newErrors).length > 0) { toast.error('No se ha podido guardar la receta. Faltan campos obligatorios'); return; }
@@ -253,8 +257,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
           tiempoEstimado: Number(p.tiempoEstimado)||0
         })),
         tecnicas: savedTecnicas.filter(t=> t.nombre.trim()),
-        // Campos removidos: tecnicasBase y puntosCriticos
-        utensilios: (utensiliosInput || '').split('\n').map(t=>t.trim()).filter(Boolean),
+        // Campos removidos: tecnicasBase, puntosCriticos y utensilios
         montaje,
         gramajePorPorcion: Number(gramajePorPorcion)||0
       };
@@ -479,13 +482,21 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
           {/* Sección: Proceso */}
           <div className="space-y-6">
               <Card>
-                <CardHeader><CardTitle>Etapas A - E</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Etapas</CardTitle></CardHeader>
                 <CardContent className="space-y-8">
                   {errors.procesos && (<span className="text-red-500 text-sm block mb-2">{errors.procesos}</span>)}
                   {procesos.map((p, pi)=>(
-                    <div key={p.etapa} className="space-y-4 p-4 rounded border">
-                      <h4 className="text-lg font-semibold">Etapa {p.etapa}</h4>
-                      <div className="grid grid-cols-3 gap-4">
+                    <div key={p.etapa} className="space-y-4 rounded border">
+                      <div className="flex items-center justify-between p-4">
+                        <h4 className="text-lg font-semibold">Etapa {p.etapa}</h4>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setOpenStageIndex(openStageIndex === pi ? -1 : pi)}>
+                            {openStageIndex === pi ? 'Ingresar' : 'Expandir'}
+                          </Button>
+                        </div>
+                      </div>
+                      {openStageIndex === pi && (
+                      <div className="grid grid-cols-3 gap-4 p-4 pt-0">
                         <div className="col-span-1">
                           <label className="block mb-1">Título</label>
                           <Input value={p.titulo} onChange={e=>setProcesos(prev=> prev.map((x,i)=> i===pi? {...x,titulo:e.target.value}:x))} />
@@ -544,6 +555,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                           {p.ingredientesUsados.length===0 && (<p className="text-sm text-slate-500">Sin ingredientes en esta etapa.</p>)}
                         </div>
                       </div>
+                      )}
                     </div>
                   ))}
                 </CardContent>
@@ -553,8 +565,10 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
           {/* Sección: Técnicas/PCC */}
           <div className="space-y-6">
               <Card>
-                <CardHeader className="flex items-center justify-between"><CardTitle>Técnicas</CardTitle>
-                  <Button size="sm" variant="secondary" onClick={addTecnica}>Agregar Técnica</Button>
+                <CardHeader className="flex items-center justify-between"><CardTitle>Tecnica Base</CardTitle>
+                  {tecnicas.length === 0 && (
+                    <Button size="sm" variant="secondary" onClick={addTecnica}>Agregar Técnica</Button>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {tecnicas.map((t, idx)=>(
@@ -572,28 +586,12 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                           <label className="block mb-1">Descripción</label>
                           <Textarea rows={4} value={t.descripcion} onChange={e=>updateTecnica(idx,'descripcion',e.target.value)} />
                           {t.saved && <p className="text-xs text-green-600 mt-1">Guardada</p>}
-                          {savedIngredientes.length > 0 && (
-                            <div className="mt-3">
-                              <p className="text-sm text-slate-600">Vincular ingredientes:</p>
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {savedIngredientes.map((ing, iidx)=> (
-                                  <Button key={iidx} variant="outline" size="sm" onClick={()=>{
-                                    setSavedTecnicas(prev => prev.map((st, si)=> si===idx ? {
-                                      ...st,
-                                      ingredientesVinculados: Array.from(new Set([...(st.ingredientesVinculados||[]), ing.nombre]))
-                                    } : st));
-                                  }}>
-                                    {ing.nombre}
-                                  </Button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          {/* Vinculación manual eliminada: ahora se vincula automáticamente a ingredientes usados */}
                         </div>
                       </div>
                     </div>
                   ))}
-                  {tecnicas.length===0 && <p className="text-sm text-slate-500">No hay técnicas agregadas.</p>}
+                  {tecnicas.length===0 && <p className="text-sm text-slate-500">No hay técnica agregada.</p>}
                   {savedTecnicas.length>0 && (
                     <div className="pt-4 border-t">
                       <p className="text-sm text-slate-600">Técnicas guardadas: {savedTecnicas.map(t=>t.nombre).join(', ')}</p>
@@ -601,13 +599,7 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
                   )}
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader><CardTitle>Utensilios Necesarios</CardTitle></CardHeader>
-                <CardContent>
-                  <Textarea rows={4} value={utensiliosInput} placeholder="Uno por línea" onChange={e => handleChange('utensiliosInput', e.target.value, setUtensiliosInput)} onBlur={e => handleBlur('utensiliosInput', e.target.value)} />
-                  {touched.utensiliosInput && errors.utensiliosInput && (<span className="text-red-500 text-sm block mt-2">{errors.utensiliosInput}</span>)}
-                </CardContent>
-              </Card>
+              {/* Sección de Utensilios Necesarios removida de la UI */}
           </div>
 
           {/* Sección: Montaje */}
@@ -627,6 +619,19 @@ export function NewRecipePage({ onCancel, onSave, user, recipes }) {
   }
 
   export async function crearReceta(payload) {
-    const { data } = await api.post('/recetas/', payload);
-    return data;
+    // Unificar con el flujo oficial: usa createRecipe (respeta /api/v1/recetas/ y variantes)
+    return await createRecipe(payload);
   }
+
+  // Re-export convenient wrappers to expose all recipe endpoints from this module
+  export const apiRecipes = {
+    createRecipe,
+    createFullRecipe,
+    getRecipe,
+    listRecipes,
+    updateRecipe,
+    deleteRecipe,
+    linkIngredienteTecnica,
+    linkCategoriaIngrediente,
+  };
+  

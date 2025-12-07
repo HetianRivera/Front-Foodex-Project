@@ -30,6 +30,15 @@ export default function App() {
         setUser({ name, role, username: stored.username, rut: stored.rut, token, user: stored });
       }
     } catch {}
+    // Limpiar sesión al cerrar/recargar para volver al login siempre
+    const onUnload = () => {
+      try { localStorage.removeItem('foodex_token'); } catch {}
+      try { localStorage.removeItem('foodex_user'); } catch {}
+      try { localStorage.removeItem('foodex_id_taller'); } catch {}
+      try { localStorage.removeItem('foodex_id_semestre'); } catch {}
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
   }, []);
 
   const handleLogin = (userData) => {
