@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 // Removed unused icons and logo imports
 import { loginWithTokenEndpoint } from '../api/auth';
+import { Moon, Sun, Loader2 } from 'lucide-react';
 
 export function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -11,23 +12,45 @@ export function LoginPage({ onLogin }) {
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [selectedRole, setSelectedRole] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const handleUsernameChange = (e) => {
     const value = e.target.value;
     setUsername(value);
     setUsernameError(value.trim() ? '' : 'Usuario requerido');
   };
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      return localStorage.getItem("foodex_theme") === "dark";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add("dark");
+      try { localStorage.setItem("foodex_theme", "dark"); } catch { }
+    } else {
+      root.classList.remove("dark");
+      try { localStorage.setItem("foodex_theme", "light"); } catch { }
+    }
+  }, [isDark]);
+
+  const toggleTheme = () => setIsDark(prev => !prev);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!username || !username.trim()) { setUsernameError('Usuario requerido'); return; }
     if (!password || password.length < 4) { setPasswordError('Ingresa tu contraseña'); return; }
+    setIsLoading(true);
     try {
       // Autenticación real contra backend con username+password
       const resp = await loginWithTokenEndpoint(username.trim(), password);
       const u = resp?.user || {};
       const roleFromApi = Array.isArray(u.roles) ? (u.roles.includes('profesor') ? 'profesor' : 'alumno') : undefined;
       const role = selectedRole || roleFromApi || 'alumno';
-      try { localStorage.setItem('foodex_ui_role', role); } catch {}
+      try { localStorage.setItem('foodex_ui_role', role); } catch { }
       const name = u.nombre || u.name || `${u.nombre || ''} ${u.apellido || ''}`.trim() || 'Usuario';
       onLogin({
         name,
@@ -44,13 +67,25 @@ export function LoginPage({ onLogin }) {
       } else {
         setUsernameError('Error al validar el usuario. Intenta nuevamente.');
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-grey-100">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 transition-colors duration-500 ease-in-out">
+      <div className="flex justify-center mb-4 margin-top-8 pt-8 px-4">
+        <Button
+          variant="secondary"
+          onClick={toggleTheme}
+          className="w-full max-w-xs h-11 transition-colors duration-500 ease-in-out"
+          title={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+        >
+          {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </Button>
+      </div>
       <div className='flex-1 flex items-center justify-center p-8'>
-        <Card className="bg-white rounded-3xl shadow-2xl p-16 max-w-4xl w-full text-center">
+        <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 rounded-3xl shadow-2xl p-16 max-w-4xl w-full text-center transition-colors duration-500 ease-in-out">
           <CardHeader className="text-center space-y-3 pb-8">
             <div className="w-40 h-40 mx-auto mb-4"><div className="relative size-full" data-name="LOGO NUEVO 1">
               <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 100 115">
@@ -76,24 +111,22 @@ export function LoginPage({ onLogin }) {
                   <path d="M72.71 87C72.71 87 73 89.62 70 88.71C66.64 87.71 67.17 84.16 69.15 83.94C68.8752 84.3345 68.7371 84.8081 68.757 85.2885C68.7768 85.7689 68.9535 86.2296 69.26 86.6C71.29 89 72.71 87 72.71 87Z" fill="var(--fill-0, #83121E)" id="Vector_20"></path>
                   <path d="M88.79 8.65C90.66 3.27 86.92 1.35 84.18 2.13C84.18 2.13 80.72 1.69 79.18 2.72C77.64 3.75 73.31 2.88 69 8.93C64.69 14.98 61.71 22.76 61.09 24.08C61.09 24.08 61.89 24.19 62.09 24.77C62.09 24.77 68.77 11.24 71.09 10.44L63 25.33L63.57 25.81C63.57 25.81 71.06 10.44 74.64 7.58C76.07 6.44 76.86 6.66 76.86 6.66C72.75 9.66 64.78 24.11 63.6 26.72C63.7935 26.8809 63.962 27.0696 64.1 27.28C64.1 27.28 74.64 7.58 78.86 6.12C79.6544 5.79328 80.5456 5.79328 81.34 6.12C76.63 11.95 66.44 28.43 65.55 29.84L65.47 30.61L67.15 29.83C67.15 29.83 83.22 7.6 83.15 6.14C83.15 6.14 86.63 7.51 87.06 9.43C87.49 11.35 85.94 13.3 85.06 14.96C84.18 16.62 76.82 25.35 75.96 26.41C76.4121 26.363 76.8679 26.363 77.32 26.41C77.32 26.41 85.14 17.41 85.81 15.51C85.81 15.51 85.51 19.75 78.5 26.58C78.8006 26.58 79.0964 26.6556 79.36 26.8C83.9064 22.787 86.9415 17.338 87.96 11.36C87.96 11.36 89.96 16.58 85.43 22.62C84.43 23.93 82.07 26.62 81.14 27.55C81.7427 27.7081 82.3189 27.9541 82.85 28.28C82.85 28.28 87.52 23.92 89.03 19.77C90.3078 16.1579 90.2225 12.2036 88.79 8.65ZM72.45 8.17C70.8 9.17 67.14 13.87 67.14 13.87C68.8 10.31 73.2 5.12 76.21 4.43C75.27 5.22 73.66 7.4 72.45 8.17ZM77.68 5.41C76.68 5.7 75.75 5.82 76.33 5.61C76.33 5.61 80.19 2.51 80.13 3.85C80.1 4.5 78.63 5.12 77.68 5.41ZM80.78 4.93C80 4.82 81.3 4 82.17 4C83.04 4 82.17 4.88 82.17 4.88C81.7152 4.99343 81.2417 5.01047 80.78 4.93ZM75.05 17.28C74.68 17.86 74.71 18.6 73.82 19C73.325 19.3828 72.9132 19.8626 72.61 20.41C71.48 22.29 70.27 24.41 70.27 24.41C70.27 24.41 71.53 22.05 72.61 20.41C73.36 19.17 74.08 18.01 74.39 17.62C75.06 16.78 81.77 6.08 81.77 6.08H82.45C82.45 6.08 75.41 16.69 75.05 17.28ZM83.9 4.92C84.9 4.26 86.83 7.3 86.83 7.3C85.54 5.67 83.19 5.39 83.9 4.92ZM88 7.36C88 7.36 86.26 3.22 85 2.82C85.5508 2.70318 86.1245 2.76418 86.6385 2.9942C87.1524 3.22422 87.5801 3.6114 87.86 4.1C88.1007 4.60624 88.2372 5.15573 88.2612 5.71577C88.2853 6.27582 88.1964 6.83499 88 7.36Z" fill="var(--fill-0, #C10F19)" id="Vector_21"></path>
                   <path d="M28.25 8.06L27.92 7.45H17.6L17.13 8.06H28.25Z" fill="var(--fill-0, #C10F19)" id="Vector_22"></path><path d="M28.82 9.19C28.7924 9.21632 28.7576 9.23374 28.72 9.24H16.27C16.08 9.49 15.91 9.73 15.75 9.96H29.21L28.82 9.19Z" fill="var(--fill-0, #C10F19)" id="Vector_23"></path><path d="M28.48 8.52H16.8C16.73 8.61 16.66 8.69 16.6 8.78H28.6L28.48 8.52Z" fill="var(--fill-0, #C10F19)" id="Vector_24"></path><path d="M30 11.52H14.75C14.61 11.76 14.47 12.02 14.33 12.29H30.33L30 11.52Z" fill="var(--fill-0, #C10F19)" id="Vector_25"></path><path d="M30.92 13.61C30.7867 13.33 30.6567 13.04 30.53 12.74H14.1C13.96 13.03 13.82 13.31 13.69 13.61H30.92Z" fill="var(--fill-0, #C10F19)" id="Vector_26"></path><path d="M27.67 7C27.58 6.82 27.48 6.65 27.39 6.48H18.39L18 7H27.67Z" fill="var(--fill-0, #C10F19)" id="Vector_27"></path><path d="M13.5 14.06C13.36 14.36 13.24 14.66 13.11 14.96H31.5L31.12 14.08L13.5 14.06Z" fill="var(--fill-0, #C10F19)" id="Vector_28"></path><path d="M29 5.11C27.42 2.2 23.73 -2.54 19.74 1.67C11.45 10.43 11.3 13.49 10.34 16.67C9.88 18.22 9.01 20.02 11.48 23.06L19.48 33.7C19.48 33.7 23.78 30.77 28.28 31.08C28.28 31.08 29.67 20.61 36.05 19.54C36 19.57 30.58 8 29 5.11ZM19.77 32.33L12.71 19.72L15 16.27C13.68 21.2 19.77 32.33 19.77 32.33ZM32.66 19.63C32.5198 18.178 32.1834 16.7516 31.66 15.39H13.11C13.0788 15.3908 13.0479 15.384 13.02 15.37C12.9921 15.3561 12.9681 15.3354 12.95 15.31C12.1 17.31 11.45 19.22 11.29 19.72C11 20.58 19.49 32.86 19.49 32.86C19.49 32.86 9.91 20.11 10.62 18.86C11.33 17.61 11.5 15.86 14.32 10.22C16.1709 6.69511 18.8942 3.7033 22.23 1.53L20.31 4H25.85C25.1287 2.73314 24.1263 1.64865 22.92 0.83C22.92 0.83 24.51 0.52 27.24 4.62C29.97 8.72 34.61 18.35 34.61 18.35C33.8741 18.6286 33.2084 19.0656 32.66 19.63Z" fill="var(--fill-0, #C10F19)" id="Vector_29"></path><path d="M26.83 5.52H19.09L18.69 6.03H27.13L26.83 5.52Z" fill="var(--fill-0, #C10F19)" id="Vector_30"></path><path d="M29.43 10.41H15.43C15.26 10.65 15.11 10.88 15 11.07H29.74L29.43 10.41Z" fill="var(--fill-0, #C10F19)" id="Vector_31"></path><path d="M26.56 5.07C26.42 4.84 26.28 4.62 26.13 4.4H20C19.83 4.61 19.66 4.82 19.49 5.05L26.56 5.07Z" fill="var(--fill-0, #C10F19)" id="Vector_32"></path></g><defs><clipPath id="clip0_184_230"><rect fill="white" height="115" width="100"></rect></clipPath></defs></svg></div></div>
-            <CardDescription className="text-sm italic text-gray-400 mb-8" style={{ fontFamily: "calibri, sans-serif", fontWeight: 500 }}>
+            <CardDescription className="text-sm italic text-gray-400 mb-8 dark:text-slate-300 transition-colors duration-500 ease-in-out" style={{ fontFamily: "calibri, sans-serif", fontWeight: 500 }}>
               El sabor de siempre, en formato digital
             </CardDescription>
-            <CardTitle className="text-2xl mb-8 text-gray-600 whitespace-nowrap">FOODEX - Taller Gastronómico</CardTitle>
+            <CardTitle className="text-2xl mb-8 text-slate-700 dark:text-slate-200 whitespace-nowrap transition-colors duration-500 ease-in-out">FOODEX - Taller Gastronómico</CardTitle>
           </CardHeader>
           <CardContent className="pb-8">
             <form onSubmit={handleSubmit} className="space-y-8">
               <div>
-                <label className="block text-xl text-gray-700 mb-4 text-left">Usuario</label>
-                <Input 
-                  type="text" 
-                  placeholder="Tu usuario" 
-                  value={username} 
+                <label className="block text-xl text-slate-700 dark:text-slate-200 mb-4 text-left transition-colors duration-500 ease-in-out">Usuario</label>
+                <Input
+                  type="text"
+                  placeholder="Tu usuario"
+                  value={username}
                   onChange={handleUsernameChange}
                   required
-                  className={`w-full px-6 py-6 text-4xl rounded-xl focus:outline-none transition-colors bg-gray-200 placeholder-gray-400 placeholder:text-xl ${
-                    usernameError ? 'border-2 border-red-500' : ''
-                  }`}
+                  className={'w-full px-6 py-6 text-4xl rounded-xl focus:outline-none transition-colors bg-gray-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-400 placeholder:text-xl transition-colors duration-500 ease-in-out' + (usernameError ? 'border-2 border-red-500' : '')}
                 />
                 {usernameError && (
                   <p className="text-red-600 text-lg mt-2 text-left">{usernameError}</p>
@@ -108,7 +141,7 @@ export function LoginPage({ onLogin }) {
                   value={password}
                   onChange={e => { setPassword(e.target.value); setPasswordError(''); }}
                   required
-                  className={`w-full px-6 py-6 text-2xl rounded-xl focus:outline-none transition-colors bg-gray-200 placeholder-gray-400 ${passwordError ? 'border-2 border-red-500' : ''}`}
+                  className={'w-full px-6 py-6 text-4xl rounded-xl focus:outline-none transition-colors bg-gray-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-400 placeholder:text-xl transition-colors duration-500 ease-in-out' + (passwordError ? 'border-2 border-red-500' : '')}
                 />
                 {passwordError && (
                   <p className="text-red-600 text-lg mt-2 text-left">{passwordError}</p>
@@ -126,7 +159,9 @@ export function LoginPage({ onLogin }) {
                         <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"></path>
                       </svg>
                     </div>
-                    <p className="text-2xl text-center">Alumno</p>
+                    <p className={`text-2xl text-center transition-colors duration-500 ease-in-out ${selectedRole === "alumno" ? "text-slate-900 dark:text-slate-black" : "text-slate-900 dark:text-white"}`}>
+                      Alumno
+                    </p>
                   </button>
 
                   <button type="button" onClick={() => setSelectedRole('profesor')} className={`p-10 rounded-2xl border-4 transition-all ${selectedRole === 'profesor' ? 'border-red-600 bg-red-50' : 'border-gray-300 hover:border-red-600'}`}>
@@ -136,16 +171,18 @@ export function LoginPage({ onLogin }) {
                         <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path>
                       </svg>
                     </div>
-                    <p className="text-2xl text-center">Profesor</p>
+                    <p className={`text-2xl text-center transition-colors duration-500 ease-in-out ${selectedRole === "profesor" ? "text-slate-900 dark:text-slate-black" : "text-slate-900 dark:text-white"}`}>
+                      Profesor
+                    </p>
                   </button>
                 </div>
               </div>
 
               <Button
-                type="submit" 
+                type="submit"
                 className="w-full bg-red-600 text-white py-10 rounded-xl hover:bg-red-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-2xl"
                 disabled={!username || !!usernameError || !selectedRole}>
-                Ingresar
+                {isLoading ? (<span className='inline-flex items-center justify-center gap-3'><Loader2 className="animate-spin w-6 h-6" /> Iniciando sesion...</span>) : ('Iniciar sesión')}
               </Button>
             </form>
           </CardContent>
