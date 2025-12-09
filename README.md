@@ -17,13 +17,7 @@ npm start
 ```
 Se abre en `http://localhost:3000`.
 
-### Ver desde una tablet en la misma red
-1. Obtén tu IP local:
-```powershell
-ipconfig
-```
-Busca “Dirección IPv4” (ej. `192.168.1.34`).
-
+#
 2. Levanta el servidor accesible en la red:
 ```powershell
 $env:HOST="0.0.0.0"; $env:PORT="3000"; npm start
