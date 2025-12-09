@@ -256,20 +256,22 @@ export async function createFullRecipe(uiRecipe) {
   // Unidades descartadas por backend actual
   await prefetchCategorias();
 
- const buildIngredientPayloadVariants = (ing, id_categoria) => {
-  const id_unidad = Number(ing?.id_unidad ?? ing?.unidad?.id_unidad);
-
-  if (!Number.isFinite(id_unidad)) {
-    throw new Error(`Unidad inválida para ingrediente: ${ing?.nombre}`);
-  }
+const buildIngredientPayloadVariants = (ing, id_categoria) => {
+  const id_unidad =
+    Number(
+      ing?.id_unidad ??
+      ing?.unidad?.id_unidad ??
+      localStorage.getItem('foodex_id_unidad_default') ??
+      1
+    );
 
   const common = { nombre: ing.nombre, id_unidad };
 
   return [
-    { ...common, id_categoria },
-    { ...common, id_categoria_id: id_categoria },
+    { ...common, id_categoria }
   ];
 };
+
 
 
   // Ingredientes
