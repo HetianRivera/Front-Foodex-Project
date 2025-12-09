@@ -50,7 +50,7 @@ function toBackendRecipePayload(recipe) {
   const base = {
     nombre_receta: (recipe?.nombre || '').toString().trim() || 'Sin nombre',
     codigo_receta: (recipe?.codigo || '').toString().trim() || null,
-    anio: getAnioDateString(),
+    anio: parseInt(getAnioDateString(), 10),
     detalle_montaje: recipe?.montaje || null,
     estado: true,
     id_usuario: userId,
@@ -256,15 +256,21 @@ export async function createFullRecipe(uiRecipe) {
   // Unidades descartadas por backend actual
   await prefetchCategorias();
 
-  const buildIngredientPayloadVariants = (ing, id_categoria) => {
-    const common = { nombre: ing.nombre };
-    return [
-      { ...common, id_categoria },
-      { ...common, id_categoria_id: id_categoria },
-      { ...common, id_categoria_ingrediente: id_categoria },
-      { ...common, id_categorias_ingrediente: id_categoria },
-    ];
-  };
+ const buildIngredientPayloadVariants = (ing, id_categoria) => {
+  const id_unidad = Number(ing?.id_unidad ?? ing?.unidad?.id_unidad);
+
+  if (!Number.isFinite(id_unidad)) {
+    throw new Error(`Unidad inválida para ingrediente: ${ing?.nombre}`);
+  }
+
+  const common = { nombre: ing.nombre, id_unidad };
+
+  return [
+    { ...common, id_categoria },
+    { ...common, id_categoria_id: id_categoria },
+  ];
+};
+
 
   // Ingredientes
   for (const cat of (uiRecipe.ingredientes || [])) {
