@@ -129,7 +129,7 @@ async function tryRequestOverCandidates(method, makePath, dataOrConfig) {
       const resp = await api.request({ method, url: path, ...(method === 'get' ? { params: dataOrConfig } : { data: dataOrConfig }) });
       resolvedBase = base; // cache success
       if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-        console.log(`[API] OK ${method.toUpperCase()} ${path}`, resp.status);
+        console.log(`[API] OK ${method.toUpperCase()} ${path}`, resp && resp.status);
       }
       return resp.data;
     } catch (err) {
@@ -345,6 +345,7 @@ const buildIngredientPayloadVariants = (ing, id_categoria) => {
       orden: i + 1,
       instruccion: descripcionTrim || null,
       ingredientesUsados: Array.isArray(p.ingredientesUsados) ? p.ingredientesUsados : [],
+      tiempoCoccionMin: Number.isFinite(tiempoVal) ? tiempoVal : null,
     });
   }
 
@@ -373,16 +374,8 @@ const buildIngredientPayloadVariants = (ing, id_categoria) => {
   if (recetaId != null) {
     for (const [nombreIng, idIng] of Object.entries(createdIngredientes)) {
       try {
-        const recetaIngredienteVariants = [
-          { id_receta: recetaId, id_ingrediente: idIng },
-          { id_receta_id: recetaId, id_ingrediente_id: idIng },
-        ];
-        let linked = false;
-        for (const v of recetaIngredienteVariants) {
-          try { await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, v); linked = true; break; }
-          catch (e) { const st = e?.response?.status; if (st && (st === 404 || st === 405)) break; else throw e; }
-        }
-        if (!linked) throw new Error(`No se pudo vincular ingrediente a receta: ${nombreIng}`);
+        const payloadRI = { id_receta: recetaId, id_ingrediente: idIng };
+        await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, payloadRI);
       } catch (err) {
         throw err;
       }
@@ -399,9 +392,10 @@ const buildIngredientPayloadVariants = (ing, id_categoria) => {
           instruccion_etapa: et.instruccion,
           id_receta: recetaId,
           id_etapa: etapaId,
-          orden: et.orden,
         };
-        await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, payloadRE);
+        const savedRE = await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, payloadRE);
+        const idRecetaEtapa = savedRE?.id_receta_etapa ?? savedRE?.id ?? null;
+        et.id_receta_etapa = idRecetaEtapa;
       } catch (err) {
         throw err;
       }
@@ -413,13 +407,16 @@ const buildIngredientPayloadVariants = (ing, id_categoria) => {
         try {
           const payloadEI = {
             cantidad_ingrediente: cantidad,
-            orden_ingrediente: null,
+            tiempo_coccion_minutos: Number.isFinite(et.tiempoCoccionMin) ? et.tiempoCoccionMin : null,
             id_etapa: etapaId,
             id_ingrediente: idIng,
           };
           // Forzar ejecución inmediata aunque esté activo el modo diferido,
           // ya que etapa-ingrediente no depende de receta.
-          await postOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, payloadEI);
+          const savedEI = await postOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, payloadEI);
+          const idEtapaIngrediente = savedEI?.id_etapa_ingrediente ?? savedEI?.id ?? null;
+          // Podríamos almacenar estos IDs por etapa si hace falta usarlos luego
+          iu.id_etapa_ingrediente = idEtapaIngrediente;
         } catch (err) {
           throw err;
         }
@@ -467,16 +464,8 @@ const buildIngredientPayloadVariants = (ing, id_categoria) => {
 // --- Utilidades de enlace adicionales ---
 // Ingrediente-Técnica
 export async function linkIngredienteTecnica({ id_ingrediente, id_tecnica }) {
-  const variants = [
-    { id_ingrediente, id_tecnica },
-    { id_ingrediente_id: id_ingrediente, id_tecnica_id: id_tecnica },
-  ];
-  for (const v of variants) {
-    try { return await postOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, v); } catch (e) {
-      const st = e?.response?.status; if (st && (st === 404 || st === 405)) break;
-    }
-  }
-  throw new Error('No se pudo vincular ingrediente_tecnica');
+  const payload = { id_ingrediente, id_tecnica };
+  return await postOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, payload);
 }
 
 // Categoria-Ingrediente (algunas APIs usan una tabla relacional explícita)
