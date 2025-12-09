@@ -365,7 +365,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
             <h1 className="text-3xl font-bold">Nueva Ficha Técnica</h1>
             <div className="flex gap-2">
               <Button variant="outline" onClick={onCancel}>Cancelar</Button>
-              <Button onClick={handleSave}>Guardar</Button>
+             <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleSave}>Guardar</Button>
               <Button variant="secondary" onClick={exportWord}>Exportar Word</Button>
             </div>
           </div>

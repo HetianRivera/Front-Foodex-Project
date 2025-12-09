@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { ChefHat, Clock, Users } from 'lucide-react';
+import { BookOpen, Clock, Users } from 'lucide-react';
 import { DashboardHeader } from './DashboardHeader';
 import { DashboardFooter } from './DashboardFooter';
 
@@ -16,9 +16,9 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
           <Card>
             <CardContent className="pt-8 pb-8">
               <div className="flex items-center gap-5">
-                <div className="bg-primary/10 p-4 rounded-xl">
-                  <ChefHat className="w-10 h-10 text-primary" />
-                </div>
+                <div className="bg-red-100 p-4 rounded-xl">
+                  <BookOpen className="w-10 h-10 text-red-600" />
+              </div>
                 <div>
                   <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Semestre</p>
                   <p className="text-2xl">{recipes.length}/10</p>
@@ -63,7 +63,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl text-slate-900 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Taller</h2>
             {user.role === 'profesor' && (
-              <Button size="lg" className="text-xl px-8 py-6" onClick={onStartNewRecipe}>+ Nueva Receta</Button>
+              <Button size="lg" className="text-xl px-8 py-6 bg-red-600 hover:bg-red-700 text-white" onClick={onStartNewRecipe}>+ Nueva Receta</Button>
             )}
           </div>
 
