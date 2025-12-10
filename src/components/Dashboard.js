@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -8,21 +8,53 @@ import { DashboardFooter } from './DashboardFooter';
 import { EditRecipeModal } from './EditRecipeModal';
 import { DeleteRecipeDialog } from './DeleteRecipeDialog';
 import { toast } from 'sonner';
-import { updateRecipe, deleteRecipe } from '../api/recipes';
+import { updateRecipe, deleteRecipe, getRecipe } from '../api/recipes';
 
 export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewRecipe, onRecipeUpdated, onRecipeDeleted }) {
   const [editingRecipe, setEditingRecipe] = useState(null);
   const [deletingRecipe, setDeletingRecipe] = useState(null);
   const [updatedRecipes, setUpdatedRecipes] = useState(recipes);
 
-  // Cuando recetas cambian desde el padre (App.js), actualizar local
-  useState(() => {
-    setUpdatedRecipes(recipes);
+  // Sincronizar quando las recetas del padre cambian
+  React.useEffect(() => {
+    // Deduplicar recetas por id_receta para evitar keys duplicadas
+    const seen = new Set();
+    const deduplicated = recipes.filter(r => {
+      const id = r.id_receta || r.id;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    setUpdatedRecipes(deduplicated);
   }, [recipes]);
 
-  const handleEditClick = (e, recipe) => {
+  // Validar si un ID es local (temporal, sin guardar a backend)
+  const isLocalRecipeId = (recipeId) => {
+    // IDs locales son timestamps (números > 1000000000000, ~13 dígitos)
+    const numId = Number(recipeId);
+    return Number.isFinite(numId) && numId > 1000000000000;
+  };
+
+  const handleEditClick = async (e, recipe) => {
     e.stopPropagation(); // No ejecutar onClick del Card
-    setEditingRecipe(recipe);
+    
+    const recipeId = recipe.id || recipe.id_receta;
+    
+    // Detectar si es un ID local (temporal, sin guardar a backend)
+    if (isLocalRecipeId(recipeId)) {
+      toast.error('Esta receta aún no ha sido guardada al servidor. Guárdala primero desde Nueva Receta.');
+      return;
+    }
+    
+    try {
+      // Recuperar la receta completa (con todos los campos incluyendo id_semestre, anio, id_usuario)
+      const fullRecipe = await getRecipe(recipeId);
+      console.log('[Dashboard] Receta completa recuperada:', fullRecipe);
+      setEditingRecipe(fullRecipe);
+    } catch (err) {
+      console.error('[Dashboard] Error al recuperar receta completa:', err);
+      toast.error('Error al abrir la receta para editar');
+    }
   };
 
   const handleDeleteClick = (e, recipe) => {
@@ -32,8 +64,15 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
 
     const handleEditSave = async (updatedRecipe) => {
     try {
-      // Enviar TODOS los campos al API
+      // editingRecipe ya es la receta COMPLETA (recuperada con getRecipe)
+      // así que tiene id_semestre, anio, id_usuario
       const payload = {
+        // Campos obligatorios: vienen del original (recuperado con getRecipe)
+        id_semestre: editingRecipe?.id_semestre,
+        anio: editingRecipe?.anio,
+        id_usuario: editingRecipe?.id_usuario,
+        id_taller: editingRecipe?.id_taller,
+        // Campos editables: vienen del formulario (updatedRecipe)
         nombre_receta: updatedRecipe.nombre || updatedRecipe.nombre_receta,
         codigo_receta: updatedRecipe.codigo || updatedRecipe.codigo_receta,
         detalle_montaje: updatedRecipe.montaje || updatedRecipe.detalle_montaje,
@@ -48,12 +87,22 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
         ...(updatedRecipe.argumentacionComercial && { argumentacionComercial: updatedRecipe.argumentacionComercial }),
       };
 
+      console.log('=== PAYLOAD ENVIADO ===');
+      console.log('id_semestre:', payload.id_semestre);
+      console.log('anio:', payload.anio);
+      console.log('id_usuario:', payload.id_usuario);
+      console.log('nombre_receta:', payload.nombre_receta);
+
       await updateRecipe(updatedRecipe.id || updatedRecipe.id_receta, payload);
 
       // Actualizar la lista local CON TODOS LOS CAMPOS
-      const newRecipes = updatedRecipes.map(r => 
-        r.id === updatedRecipe.id || r.id_receta === updatedRecipe.id_receta 
-          ? {
+      const recipeId = updatedRecipe.id_receta || updatedRecipe.id;
+      const newRecipes = updatedRecipes
+        .map(r => {
+          const rId = r.id_receta || r.id;
+          // Si es la receta que editamos, actualizar
+          if (rId === recipeId) {
+            return {
               ...r,
               nombre: updatedRecipe.nombre,
               nombre_receta: updatedRecipe.nombre,
@@ -68,9 +117,16 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
               aporte: updatedRecipe.aporte,
               tareaInicio: updatedRecipe.tareaInicio,
               argumentacionComercial: updatedRecipe.argumentacionComercial,
-            }
-          : r
-      );
+            };
+          }
+          return r;
+        })
+        // Deduplicar por si acaso (evitar keys duplicadas)
+        .filter((r, idx, arr) => {
+          const rId = r.id_receta || r.id;
+          return arr.findIndex(x => (x.id_receta || x.id) === rId) === idx;
+        });
+      
       setUpdatedRecipes(newRecipes);
 
       // Notificar al padre
@@ -90,6 +146,13 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
     try {
       const recipeId = deletingRecipe.id || deletingRecipe.id_receta;
       console.log('Intentando eliminar receta con ID:', recipeId);
+      
+      // Detectar si es un ID local (temporal, sin guardar a backend)
+      if (isLocalRecipeId(recipeId)) {
+        toast.error('Esta receta aún no ha sido guardada al servidor. No se puede eliminar.');
+        setDeletingRecipe(null);
+        return;
+      }
       
       await deleteRecipe(recipeId);
 
@@ -114,7 +177,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
     }
   };
 
-  const displayRecipes = updatedRecipes.length > 0 ? updatedRecipes : recipes;
+  const displayRecipes = updatedRecipes || recipes || [];
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -178,9 +241,12 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
           </div>
 
           <div className="grid grid-cols-2 gap-8">
-            {displayRecipes.map((recipe) => (
+            {displayRecipes.map((recipe) => {
+              // Usar id_receta como key principal (es el ID en backend)
+              const recipeKey = recipe.id_receta || recipe.id;
+              return (
               <Card 
-                key={recipe.id || recipe.id_receta}
+                key={recipeKey}
                 className="hover:shadow-xl transition-shadow border-2 relative"
               >
                 <CardHeader className="pb-4">
@@ -257,7 +323,8 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            );
+            })}
           </div>
         </div>
       </div>

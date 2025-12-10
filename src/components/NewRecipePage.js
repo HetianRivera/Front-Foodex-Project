@@ -282,8 +282,15 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         const body = err?.response?.data;
         const msg = (body && typeof body === 'object') ? JSON.stringify(body) : (body || err?.message || 'Error desconocido');
         console.warn('Fallo al guardar en API, usando guardado local', status, msg);
+        
+        // Si se creó la receta en backend pero falló al crear relaciones,
+        // usar el id_receta real del servidor en lugar del ID temporal
+        const recetaParaGuardar = err._recipeBase 
+          ? { ...receta, id_receta: err._recipeBase.id_receta || err._recipeBase.id }
+          : receta;
+        
         toast.error(`No se pudo guardar en el servidor (${status || 'sin código'}). ${msg}`);
-        onSave(receta);
+        onSave(recetaParaGuardar);
       }
     };
 
