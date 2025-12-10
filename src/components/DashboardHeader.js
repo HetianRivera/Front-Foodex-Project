@@ -1,6 +1,7 @@
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { LogOut } from 'lucide-react';
+import { LogOut, Sun, Moon } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 // Complete logo SVG with chef hat graphic
 function InlineLogo() {
@@ -52,6 +53,25 @@ function InlineLogo() {
 }
 
 export function DashboardHeader({ user, onLogout, children }) {
+    const [isDark, setIsDark] = useState(() => {
+    try {
+      return localStorage.getItem("foodex_theme") === "dark";
+    } catch {
+      return false;
+    }
+  });
+    useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add("dark");
+      try { localStorage.setItem("foodex_theme", "dark"); } catch {}
+    } else {
+      root.classList.remove("dark");
+      try { localStorage.setItem("foodex_theme", "light"); } catch {}
+    }
+  }, [isDark]);
+
+  const toggleTheme = () => setIsDark(prev => !prev);
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -75,6 +95,9 @@ export function DashboardHeader({ user, onLogout, children }) {
               <h1 className="text-3xl">FOODEX - Taller Gastronómico</h1>
               <p className="text-xl text-slate-300">{semestreText}</p>
             </div>
+            <Button variant="secondary" size="lg" onClick={toggleTheme} className="p-4 transition-colors duration-500 ease-in-out" title={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}>
+              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </Button>
           </div>
           <div className="flex items-center gap-6">
             <div className="text-right">

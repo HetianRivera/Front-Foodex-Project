@@ -180,7 +180,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
   const displayRecipes = updatedRecipes || recipes || [];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out">
       <DashboardHeader user={user} onLogout={onLogout} />
 
       {/* Stats */}
@@ -193,8 +193,8 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   <ChefHat className="w-10 h-10 text-primary" />
                 </div>
                 <div>
-                  <p className="text-lg text-slate-600 mb-1">Recetas del Semestre</p>
-                  <p className="text-2xl">{displayRecipes.length}/10</p>
+                  <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Semestre</p>
+                  <p className="text-2xl">{recipes.length}/10</p>
                 </div>
               </div>
             </CardContent>
@@ -207,7 +207,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   <Clock className="w-10 h-10 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-lg text-slate-600 mb-1">Tiempo Promedio</p>
+                  <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Tiempo Promedio</p>
                   <p className="text-2xl">
                     {(displayRecipes.length === 0) ? 0 : Math.round(displayRecipes.reduce((sum, r) => sum + (r.tiempo || 0), 0) / displayRecipes.length)} min
                   </p>
@@ -223,8 +223,8 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   <Users className="w-10 h-10 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-lg text-slate-600 mb-1">Rol Actual</p>
-                  <p className="text-2xl">{user.role === 'profesor' ? 'Profesor' : 'Alumno'}</p>
+                  <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Rol Actual</p>
+                  <p className="text-2xl"> {user.role === 'profesor' ? 'Profesor' : 'Alumno'}</p>
                 </div>
               </div>
             </CardContent>
@@ -234,7 +234,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
         {/* Recipe List */}
         <div>
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl text-slate-900">Recetas del Taller</h2>
+            <h2 className="text-3xl text-slate-900 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Taller</h2>
             {user.role === 'profesor' && (
               <Button size="lg" className="text-xl px-8 py-6" onClick={onStartNewRecipe}>+ Nueva Receta</Button>
             )}
@@ -270,11 +270,11 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   <div className="flex items-center gap-6 text-base text-slate-600">
                     <div className="flex items-center gap-2">
                       <Clock className="w-5 h-5" />
-                      <span className="text-lg">{recipe.tiempo || 0} min</span>
+                      <span className="text-lg dark:text-slate-200 transition-colors duration-300 ease-in-out">{recipe.tiempo} min</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Users className="w-5 h-5" />
-                      <span className="text-lg">{recipe.porcion || 1} porción</span>
+                      <span className="text-lg dark:text-slate-200 transition-colors duration-300 ease-in-out">{recipe.porcion} porción</span>
                     </div>
                   </div>
 
