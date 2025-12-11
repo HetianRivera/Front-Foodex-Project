@@ -8,7 +8,7 @@ import { DashboardFooter } from './DashboardFooter';
 import { EditRecipeModal } from './EditRecipeModal';
 import { DeleteRecipeDialog } from './DeleteRecipeDialog';
 import { toast } from 'sonner';
-import { updateRecipe, deleteRecipe, getRecipe } from '../api/recipes';
+import { updateRecipe, deleteRecipe } from '../api/recipes';
 
 export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewRecipe, onRecipeUpdated, onRecipeDeleted }) {
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -46,15 +46,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
       return;
     }
     
-    try {
-      // Recuperar la receta completa (con todos los campos incluyendo id_semestre, anio, id_usuario)
-      const fullRecipe = await getRecipe(recipeId);
-      console.log('[Dashboard] Receta completa recuperada:', fullRecipe);
-      setEditingRecipe(fullRecipe);
-    } catch (err) {
-      console.error('[Dashboard] Error al recuperar receta completa:', err);
-      toast.error('Error al abrir la receta para editar');
-    }
+    setEditingRecipe(recipe);
   };
 
   const handleDeleteClick = (e, recipe) => {

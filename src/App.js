@@ -78,9 +78,11 @@ export default function App() {
     const loadRecipesFromAPI = async () => {
       setLoadingRecipes(true);
       try {
-        const data = await listRecipes();
-        const recipesList = Array.isArray(data) ? data : (data?.results || []);
-        setRecipes(recipesList);
+        //const data = await listRecipes();
+        //const recipesList = Array.isArray(data) ? data : (data?.results || []);
+        //setRecipes(recipesList);
+
+        setRecipes([]);
       } catch (err) {
         console.error('Error cargando recetas:', err);
         toast.error('Error al cargar las recetas');

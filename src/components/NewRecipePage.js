@@ -265,14 +265,8 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         const saved = await createFullRecipe(receta);
         const idCandidate = saved?.id ?? saved?.id_receta ?? saved?.pk ?? saved?.uuid ?? null;
         if (idCandidate != null) {
-          try {
-            const verify = await getRecipe(idCandidate);
-            toast.success(`Receta ${(verify?.nombre || verify?.nombre_receta || nombre || 'sin nombre')} guardada y verificada`);
-            onSave(verify || saved);
-          } catch {
-            toast.success(`Receta ${(saved?.nombre || saved?.nombre_receta || nombre || 'sin nombre')} guardada`);
-            onSave(saved);
-          }
+          toast.success(`Receta ${(saved?.nombre || saved?.nombre_receta || nombre || 'sin nombre')} guardada`);
+          onSave(saved);
         } else {
           toast.success(`Receta ${(saved?.nombre || saved?.nombre_receta || nombre || 'sin nombre')} guardada`);
           onSave(saved);
