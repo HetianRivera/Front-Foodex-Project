@@ -24,19 +24,51 @@ function getIntEnvOr(name, fallback) {
 
 // Utilidad de fecha eliminada por no uso para evitar lint no-unused-vars
 
-function getAnioDateString() {
+function getAnioYear() {
   const raw = process.env.REACT_APP_ANIO;
   if (raw !== undefined && raw !== null) {
     const s = String(raw).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; // ya es YYYY-MM-DD
+    // Si es YYYY-MM-DD, extraer solo el año
+    const match = s.match(/^(\d{4})/);
+    if (match) {
+      const n = Number(match[1]);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    // Si es solo un número, usarlo directamente
     const n = Number(s);
-    if (Number.isFinite(n) && n > 0) return `${n}-01-01`;
+    if (Number.isFinite(n) && n > 0) return n;
   }
   try {
     const y = new Date().getFullYear();
-    if (y && y > 0) return `${y}-01-01`;
+    if (y && y > 0) return y;
   } catch {}
-  return '2025-01-01';
+  return 2025;
+}
+
+function getAnioDateString() {
+  return String(getAnioYear());
+}
+
+// Normalizar cantidades de ingredientes a una sola unidad (gramos para sólidos, mililitros/gramos para líquidos)
+function normalizeIngredientsInRecipe(recipe) {
+  if (!recipe || !Array.isArray(recipe.ingredientes)) return recipe;
+  // Deep copy shallow structure we need
+  const copy = { ...recipe, ingredientes: recipe.ingredientes.map(cat => ({
+    categoria: cat.categoria,
+    ingredientes: Array.isArray(cat.ingredientes) ? cat.ingredientes.map(ing => {
+      const nombre = ing.nombre;
+      let cantidad = Number(ing.cantidad) || 0;
+      const unidad = (ing.unidad || '').toString().toLowerCase();
+      // Normalización básica: kg -> g, lt/l -> ml (store as "cantidad" in base units)
+      if (unidad === 'kg') cantidad = cantidad * 1000;
+      if (unidad === 'lt' || unidad === 'l') cantidad = cantidad * 1000;
+      if (unidad === 'g' || unidad === 'gr' || unidad === 'ml') cantidad = cantidad;
+      // 'u' (unidad) remains a count — keep as-is
+      // Return object without 'unidad' to align with backend that ignores units
+      return { nombre, cantidad: Number(cantidad) };
+    }) : []
+  })) };
+  return copy;
 }
 
 // Map UI recipe object -> backend schema for POST /api/v1/recetas/
@@ -216,6 +248,12 @@ export async function listRecipes(params = {}) {
 
 export async function updateRecipe(id, patch) {
   const idSeg = `${encodeURIComponent(id)}/`;
+  // Si el patch incluye ingredientes en la forma de UI, normalizarlos antes de enviar
+  try {
+    if (patch && Array.isArray(patch.ingredientes)) {
+      patch = normalizeIngredientsInRecipe(patch);
+    }
+  } catch {}
   return tryRequestOverCandidates('put', () => idSeg, patch);
 }
 
@@ -261,6 +299,8 @@ async function postOverCandidates(urls, data) {
 }
 
 export async function createFullRecipe(uiRecipe) {
+  // Normalizar ingredientes (convertir unidades a base y eliminar 'unidad')
+  try { uiRecipe = normalizeIngredientsInRecipe(uiRecipe); } catch {}
   // 0) Crear receta primero para obtener id_receta
   let base = null;
   let recetaId = null;
@@ -519,6 +559,11 @@ const buildIngredientPayloadVariants = (ing, id_categoria) => {
       }
     }
   } catch (err) {
+    // Si la receta se creó (recetaId !== null) pero falla en relaciones,
+    // adjuntar el base al error para que el cliente pueda usarlo
+    if (recetaId != null && base) {
+      err._recipeBase = base;
+    }
     throw err;
   }
 

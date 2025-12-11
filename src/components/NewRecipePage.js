@@ -265,14 +265,8 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         const saved = await createFullRecipe(receta);
         const idCandidate = saved?.id ?? saved?.id_receta ?? saved?.pk ?? saved?.uuid ?? null;
         if (idCandidate != null) {
-          try {
-            const verify = await getRecipe(idCandidate);
-            toast.success(`Receta ${(verify?.nombre || verify?.nombre_receta || nombre || 'sin nombre')} guardada y verificada`);
-            onSave(verify || saved);
-          } catch {
-            toast.success(`Receta ${(saved?.nombre || saved?.nombre_receta || nombre || 'sin nombre')} guardada`);
-            onSave(saved);
-          }
+          toast.success(`Receta ${(saved?.nombre || saved?.nombre_receta || nombre || 'sin nombre')} guardada`);
+          onSave(saved);
         } else {
           toast.success(`Receta ${(saved?.nombre || saved?.nombre_receta || nombre || 'sin nombre')} guardada`);
           onSave(saved);
@@ -282,8 +276,15 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         const body = err?.response?.data;
         const msg = (body && typeof body === 'object') ? JSON.stringify(body) : (body || err?.message || 'Error desconocido');
         console.warn('Fallo al guardar en API, usando guardado local', status, msg);
+        
+        // Si se creó la receta en backend pero falló al crear relaciones,
+        // usar el id_receta real del servidor en lugar del ID temporal
+        const recetaParaGuardar = err._recipeBase 
+          ? { ...receta, id_receta: err._recipeBase.id_receta || err._recipeBase.id }
+          : receta;
+        
         toast.error(`No se pudo guardar en el servidor (${status || 'sin código'}). ${msg}`);
-        onSave(receta);
+        onSave(recetaParaGuardar);
       }
     };
 
