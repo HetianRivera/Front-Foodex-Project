@@ -24,19 +24,51 @@ function getIntEnvOr(name, fallback) {
 
 // Utilidad de fecha eliminada por no uso para evitar lint no-unused-vars
 
-function getAnioDateString() {
+function getAnioYear() {
   const raw = process.env.REACT_APP_ANIO;
   if (raw !== undefined && raw !== null) {
     const s = String(raw).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; // ya es YYYY-MM-DD
+    // Si es YYYY-MM-DD, extraer solo el año
+    const match = s.match(/^(\d{4})/);
+    if (match) {
+      const n = Number(match[1]);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    // Si es solo un número, usarlo directamente
     const n = Number(s);
-    if (Number.isFinite(n) && n > 0) return `${n}-01-01`;
+    if (Number.isFinite(n) && n > 0) return n;
   }
   try {
     const y = new Date().getFullYear();
-    if (y && y > 0) return `${y}-01-01`;
+    if (y && y > 0) return y;
   } catch {}
-  return '2025-01-01';
+  return 2025;
+}
+
+function getAnioDateString() {
+  return String(getAnioYear());
+}
+
+// Normalizar cantidades de ingredientes a una sola unidad (gramos para sólidos, mililitros/gramos para líquidos)
+function normalizeIngredientsInRecipe(recipe) {
+  if (!recipe || !Array.isArray(recipe.ingredientes)) return recipe;
+  // Deep copy shallow structure we need
+  const copy = { ...recipe, ingredientes: recipe.ingredientes.map(cat => ({
+    categoria: cat.categoria,
+    ingredientes: Array.isArray(cat.ingredientes) ? cat.ingredientes.map(ing => {
+      const nombre = ing.nombre;
+      let cantidad = Number(ing.cantidad) || 0;
+      const unidad = (ing.unidad || '').toString().toLowerCase();
+      // Normalización básica: kg -> g, lt/l -> ml (store as "cantidad" in base units)
+      if (unidad === 'kg') cantidad = cantidad * 1000;
+      if (unidad === 'lt' || unidad === 'l') cantidad = cantidad * 1000;
+      if (unidad === 'g' || unidad === 'gr' || unidad === 'ml') cantidad = cantidad;
+      // 'u' (unidad) remains a count — keep as-is
+      // Return object without 'unidad' to align with backend that ignores units
+      return { nombre, cantidad: Number(cantidad) };
+    }) : []
+  })) };
+  return copy;
 }
 
 // Map UI recipe object -> backend schema for POST /api/v1/recetas/
@@ -50,7 +82,7 @@ function toBackendRecipePayload(recipe) {
   const base = {
     nombre_receta: (recipe?.nombre || '').toString().trim() || 'Sin nombre',
     codigo_receta: (recipe?.codigo || '').toString().trim() || null,
-    anio: getAnioDateString(),
+    anio: parseInt(getAnioDateString(), 10),
     detalle_montaje: recipe?.montaje || null,
     estado: true,
     id_usuario: userId,
@@ -117,6 +149,41 @@ async function ensureCategoria(nombre) {
   throw new Error(`Categoría no encontrada: ${nombre}`);
 }
 
+// Genera un entero positivo para `id_receta_ingrediente` si el backend lo exige y
+// el UI no lo entrega. Minimiza colisiones usando receta+ingrediente+timestamp.
+function genRecetaIngredienteId(recetaId, ingredienteId, seq = 0) {
+  const r = Number(recetaId) || 0;
+  const i = Number(ingredienteId) || 0;
+  const t = Date.now() % 1000000000;
+  const n = (r * 100000) + (i * 100) + (seq % 100) + t;
+  return Math.abs(n);
+}
+
+// Generadores para otras tablas intermedias con PK entera no nula
+function genRecetaEtapaId(recetaId, etapaId, seq = 0) {
+  const r = Number(recetaId) || 0;
+  const e = Number(etapaId) || 0;
+  const t = Date.now() % 1000000000;
+  const n = (r * 100000) + (e * 100) + (seq % 100) + t;
+  return Math.abs(n);
+}
+
+function genEtapaIngredienteId(etapaId, ingredienteId, seq = 0) {
+  const e = Number(etapaId) || 0;
+  const i = Number(ingredienteId) || 0;
+  const t = Date.now() % 1000000000;
+  const n = (e * 100000) + (i * 100) + (seq % 100) + t;
+  return Math.abs(n);
+}
+
+function genIngredienteTecnicaId(ingredienteId, tecnicaId, seq = 0) {
+  const i = Number(ingredienteId) || 0;
+  const te = Number(tecnicaId) || 0;
+  const t = Date.now() % 1000000000;
+  const n = (i * 100000) + (te * 100) + (seq % 100) + t;
+  return Math.abs(n);
+}
+
 async function tryRequestOverCandidates(method, makePath, dataOrConfig) {
   let lastErr;
   const bases = resolvedBase ? [resolvedBase] : CANDIDATE_BASES;
@@ -129,7 +196,7 @@ async function tryRequestOverCandidates(method, makePath, dataOrConfig) {
       const resp = await api.request({ method, url: path, ...(method === 'get' ? { params: dataOrConfig } : { data: dataOrConfig }) });
       resolvedBase = base; // cache success
       if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-        console.log(`[API] OK ${method.toUpperCase()} ${path}`, resp.status);
+        console.log(`[API] OK ${method.toUpperCase()} ${path}`, resp && resp.status);
       }
       return resp.data;
     } catch (err) {
@@ -181,6 +248,12 @@ export async function listRecipes(params = {}) {
 
 export async function updateRecipe(id, patch) {
   const idSeg = `${encodeURIComponent(id)}/`;
+  // Si el patch incluye ingredientes en la forma de UI, normalizarlos antes de enviar
+  try {
+    if (patch && Array.isArray(patch.ingredientes)) {
+      patch = normalizeIngredientsInRecipe(patch);
+    }
+  } catch {}
   return tryRequestOverCandidates('put', () => idSeg, patch);
 }
 
@@ -226,6 +299,8 @@ async function postOverCandidates(urls, data) {
 }
 
 export async function createFullRecipe(uiRecipe) {
+  // Normalizar ingredientes (convertir unidades a base y eliminar 'unidad')
+  try { uiRecipe = normalizeIngredientsInRecipe(uiRecipe); } catch {}
   // 0) Crear receta primero para obtener id_receta
   let base = null;
   let recetaId = null;
@@ -250,21 +325,29 @@ export async function createFullRecipe(uiRecipe) {
   }
 
   // 1) Crear tablas independientes después: unidades/categorías (prefetch/ensure), ingredientes, etapas, técnicas
-  const createdIngredientes = {}; // nombre -> id
+  const createdIngredientes = {}; // nombre -> { id, clientRecetaIngId }
   const createdEtapas = []; // { id_etapa, fase, orden, instruccion, ingredientesUsados }
   const unidadAlias = { gr: 'gramos', kg: 'kilogramos', ml: 'mililitros', lt: 'litros', u: 'unidades' };
   // Unidades descartadas por backend actual
   await prefetchCategorias();
 
-  const buildIngredientPayloadVariants = (ing, id_categoria) => {
-    const common = { nombre: ing.nombre };
-    return [
-      { ...common, id_categoria },
-      { ...common, id_categoria_id: id_categoria },
-      { ...common, id_categoria_ingrediente: id_categoria },
-      { ...common, id_categorias_ingrediente: id_categoria },
-    ];
-  };
+const buildIngredientPayloadVariants = (ing, id_categoria) => {
+  const id_unidad =
+    Number(
+      ing?.id_unidad ??
+      ing?.unidad?.id_unidad ??
+      localStorage.getItem('foodex_id_unidad_default') ??
+      1
+    );
+
+  const common = { nombre: ing.nombre, id_unidad };
+
+  return [
+    { ...common, id_categoria }
+  ];
+};
+
+
 
   // Ingredientes
   for (const cat of (uiRecipe.ingredientes || [])) {
@@ -292,7 +375,12 @@ export async function createFullRecipe(uiRecipe) {
         }
         if (!savedIng) throw new Error('No se pudo crear ingrediente (variantes fallidas)');
         const idIng = savedIng?.id_ingrediente ?? savedIng?.id ?? null;
-        if (idIng != null) createdIngredientes[ing.nombre] = idIng;
+        if (idIng != null) {
+          const rawRelId = ing?.id_receta_ingrediente;
+          const relIdNum = Number(rawRelId);
+          const clientRelId = Number.isFinite(relIdNum) && relIdNum > 0 ? relIdNum : null;
+          createdIngredientes[ing.nombre] = { id: idIng, clientRecetaIngId: clientRelId };
+        }
       } catch (err) {
         // No ocultar errores de API
         throw err;
@@ -337,6 +425,7 @@ export async function createFullRecipe(uiRecipe) {
       orden: i + 1,
       instruccion: descripcionTrim || null,
       ingredientesUsados: Array.isArray(p.ingredientesUsados) ? p.ingredientesUsados : [],
+      tiempoCoccionMin: Number.isFinite(tiempoVal) ? tiempoVal : null,
     });
   }
 
@@ -363,18 +452,19 @@ export async function createFullRecipe(uiRecipe) {
 
   // 3) Enlazar receta con ingredientes
   if (recetaId != null) {
-    for (const [nombreIng, idIng] of Object.entries(createdIngredientes)) {
+    let seq = 0;
+    for (const [nombreIng, info] of Object.entries(createdIngredientes)) {
       try {
-        const recetaIngredienteVariants = [
-          { id_receta: recetaId, id_ingrediente: idIng },
-          { id_receta_id: recetaId, id_ingrediente_id: idIng },
-        ];
-        let linked = false;
-        for (const v of recetaIngredienteVariants) {
-          try { await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, v); linked = true; break; }
-          catch (e) { const st = e?.response?.status; if (st && (st === 404 || st === 405)) break; else throw e; }
+        const payloadRI = { id_receta: recetaId, id_ingrediente: info?.id };
+        // Si el backend requiere valor no nulo, asegurar uno.
+        const requireRelId = String(process.env.REACT_APP_REQUIRE_RECETA_ING_ID || 'true').toLowerCase() === 'true';
+        if (info?.clientRecetaIngId != null) {
+          payloadRI.id_receta_ingrediente = info.clientRecetaIngId;
+        } else if (requireRelId) {
+          payloadRI.id_receta_ingrediente = genRecetaIngredienteId(recetaId, info?.id, seq);
         }
-        if (!linked) throw new Error(`No se pudo vincular ingrediente a receta: ${nombreIng}`);
+        await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, payloadRI);
+        seq += 1;
       } catch (err) {
         throw err;
       }
@@ -391,27 +481,41 @@ export async function createFullRecipe(uiRecipe) {
           instruccion_etapa: et.instruccion,
           id_receta: recetaId,
           id_etapa: etapaId,
-          orden: et.orden,
         };
-        await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, payloadRE);
+        // PK requerida: id_receta_etapa
+        const requireRelId = String(process.env.REACT_APP_REQUIRE_RECETA_ETAPA_ID || 'true').toLowerCase() === 'true';
+        if (requireRelId) {
+          payloadRE.id_receta_etapa = genRecetaEtapaId(recetaId, etapaId, et.orden ?? 0);
+        }
+        const savedRE = await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, payloadRE);
+        const idRecetaEtapa = savedRE?.id_receta_etapa ?? savedRE?.id ?? null;
+        et.id_receta_etapa = idRecetaEtapa;
       } catch (err) {
         throw err;
       }
     }
     for (const iu of et.ingredientesUsados) {
-      const idIng = createdIngredientes[iu?.nombre];
+      const idIng = createdIngredientes[iu?.nombre]?.id;
       const cantidad = Number(iu.cantidad);
       if (etapaId != null && idIng != null && Number.isFinite(cantidad)) {
         try {
           const payloadEI = {
             cantidad_ingrediente: cantidad,
-            orden_ingrediente: null,
+            tiempo_coccion_minutos: Number.isFinite(et.tiempoCoccionMin) ? et.tiempoCoccionMin : null,
             id_etapa: etapaId,
             id_ingrediente: idIng,
           };
+          // PK requerida siempre: id_etapa_ingrediente (evitar nulos)
+          const genIdEI = genEtapaIngredienteId(etapaId, idIng);
+          // Enviar ambos alias por compatibilidad con serializers: PK como 'id' y como 'id_etapa_ingrediente'
+          payloadEI.id_etapa_ingrediente = genIdEI;
+          payloadEI.id = genIdEI;
           // Forzar ejecución inmediata aunque esté activo el modo diferido,
           // ya que etapa-ingrediente no depende de receta.
-          await postOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, payloadEI);
+          const savedEI = await postOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, payloadEI);
+          const idEtapaIngrediente = savedEI?.id_etapa_ingrediente ?? savedEI?.id ?? null;
+          // Podríamos almacenar estos IDs por etapa si hace falta usarlos luego
+          iu.id_etapa_ingrediente = idEtapaIngrediente;
         } catch (err) {
           throw err;
         }
@@ -434,10 +538,15 @@ export async function createFullRecipe(uiRecipe) {
       const targetNames = scope === 'all' ? allNames : allNames.filter(n => usedNames.has(n));
       for (const tec of createdTecnicas) {
         for (const nm of targetNames) {
-          const idIng = createdIngredientes[nm];
+          const idIng = createdIngredientes[nm]?.id;
           if (idIng != null) {
             try {
               const payloadIT = { id_ingrediente: idIng, id_tecnica: tec.id_tecnica };
+              // PK requerida: id_ingrediente_tecnica
+              const requireRelIdIT = String(process.env.REACT_APP_REQUIRE_ING_TEC_ID || 'true').toLowerCase() === 'true';
+              if (requireRelIdIT) {
+                payloadIT.id_ingrediente_tecnica = genIngredienteTecnicaId(idIng, tec.id_tecnica);
+              }
               // Forzar ejecución inmediata aunque esté activo el modo diferido,
               // ya que ingrediente-tecnica no depende de receta.
               await linkIngredienteTecnica(payloadIT);
@@ -450,6 +559,11 @@ export async function createFullRecipe(uiRecipe) {
       }
     }
   } catch (err) {
+    // Si la receta se creó (recetaId !== null) pero falla en relaciones,
+    // adjuntar el base al error para que el cliente pueda usarlo
+    if (recetaId != null && base) {
+      err._recipeBase = base;
+    }
     throw err;
   }
 
@@ -458,17 +572,21 @@ export async function createFullRecipe(uiRecipe) {
 
 // --- Utilidades de enlace adicionales ---
 // Ingrediente-Técnica
-export async function linkIngredienteTecnica({ id_ingrediente, id_tecnica }) {
+export async function linkIngredienteTecnica({ id_ingrediente, id_tecnica, id_ingrediente_tecnica }) {
+  // Probar variantes de nombres de campo según serializer/Model
   const variants = [
-    { id_ingrediente, id_tecnica },
-    { id_ingrediente_id: id_ingrediente, id_tecnica_id: id_tecnica },
+    { id_ingrediente, id_tecnica, ...(id_ingrediente_tecnica != null ? { id_ingrediente_tecnica } : {}) },
+    { id_ingrediente_id: id_ingrediente, id_tecnica_id: id_tecnica, ...(id_ingrediente_tecnica != null ? { id_ingrediente_tecnica } : {}) },
+    { ingrediente: id_ingrediente, tecnica: id_tecnica, ...(id_ingrediente_tecnica != null ? { id_ingrediente_tecnica } : {}) },
   ];
+  let lastErr;
   for (const v of variants) {
     try { return await postOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, v); } catch (e) {
-      const st = e?.response?.status; if (st && (st === 404 || st === 405)) break;
+      lastErr = e;
+      const st = e?.response?.status; if (!(st && (st === 404 || st === 405))) continue;
     }
   }
-  throw new Error('No se pudo vincular ingrediente_tecnica');
+  throw lastErr || new Error('No se pudo vincular ingrediente-tecnica');
 }
 
 // Categoria-Ingrediente (algunas APIs usan una tabla relacional explícita)
