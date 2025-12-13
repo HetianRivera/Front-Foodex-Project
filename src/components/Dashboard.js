@@ -274,11 +274,6 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                     <Badge variant="secondary" className="text-base px-3 py-1">
                       {recipe.categoria || 'Sin categoría'}
                     </Badge>
-                    {(Array.isArray(recipe.tecnicasBase) ? recipe.tecnicasBase.slice(0, 2) : []).map((tecnica, idx) => (
-                      <Badge key={idx} variant="outline" className="text-sm px-2 py-1">
-                        {tecnica}
-                      </Badge>
-                    ))}
                   </div>
 
                   {/* Botones */}
