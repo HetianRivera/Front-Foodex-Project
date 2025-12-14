@@ -52,6 +52,11 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     // Control de UI: sólo una etapa abierta a la vez
     const [openStageIndex, setOpenStageIndex] = useState(0);
 
+    const tiempoTotal = procesos.reduce(
+      (acc, etapa) => acc + (Number(etapa.tiempoEstimado) || 0),
+      0
+    );
+
     // Helpers de validación y manejo de inputs usados en onChange/onBlur
     const validateField = (field, value) => {
       switch (field) {
@@ -398,10 +403,10 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                     {touched.categoria && errors.categoria && (<span className="text-red-500 text-sm">{errors.categoria}</span>)}
                   </div>
                   <div>
-                    <label className="block mb-1">Tiempo (min)</label>
-                    <Input type="number" value={tiempo} min={0} onChange={e => handleChange('tiempo', e.target.value, setTiempo)} onBlur={e => handleBlur('tiempo', e.target.value)} 
-                    className="bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300"/>
-                    {touched.tiempo && errors.tiempo && (<span className="text-red-500 text-sm">{errors.tiempo}</span>)}
+                    <label className="block mb-1">Tiempo total (min)</label>
+                    <span className="bg-slate-50 text-slate-900 dark:bg-slate-800 dark:text-slate-100 px-2 py-1 rounded">
+                      {tiempoTotal}
+                    </span>
                   </div>
                   <div>
                     <label className="block mb-1">Porciones</label>
