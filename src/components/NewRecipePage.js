@@ -612,11 +612,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                     </div>
                   ))}
                   {tecnicas.length===0 && <p className="text-sm text-slate-500">No hay técnica agregada.</p>}
-                  {savedTecnicas.length>0 && (
-                    <div className="pt-4 border-t">
-                      <p className="text-sm text-slate-600">Técnicas guardadas: {savedTecnicas.map(t=>t.nombre).join(', ')}</p>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
               {/* Sección de Utensilios Necesarios removida de la UI */}
