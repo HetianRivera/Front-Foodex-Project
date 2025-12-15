@@ -81,6 +81,7 @@ export async function loginWithUsername(username, password, extra = {}) {
     setAuthToken(tokenData.access);
     try { localStorage.setItem('foodex_token', tokenData.access); } catch {}
   }
+
   const userRecord = await ensureUserRecord(username, tokenData?.user, extra).catch(() => tokenData?.user);
   await ensureAcademicEntitiesOnLogin().catch(() => {});
   normalizeAndStoreUser(userRecord, { rut: undefined });

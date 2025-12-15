@@ -39,7 +39,7 @@ export function LoginPage({ onLogin }) {
 
   const toggleTheme = () => setIsDark(prev => !prev);
 
-  const handleSubmit = async (e) => {
+    const handleSubmit = async (e) => {
     e.preventDefault();
     if (!username || !username.trim()) { setUsernameError('Usuario requerido'); return; }
     if (!password || password.length < 4) { setPasswordError('Ingresa tu contraseña'); return; }
@@ -48,7 +48,7 @@ export function LoginPage({ onLogin }) {
       // Autenticación real contra backend con username+password
       const resp = await loginWithTokenEndpoint(username.trim(), password);
       const u = resp?.user || {};
-      const roleFromApi = Array.isArray(u.roles) ? (u.roles.includes('profesor') ? 'profesor' : 'alumno') : undefined;
+      const roleFromApi = Array.isArray(u.roles) ? (u.roles.some(r => String(r).toLowerCase().includes('profesor')) ? 'profesor' : 'alumno') : undefined;
       const role = selectedRole || roleFromApi || 'alumno';
       try { localStorage.setItem('foodex_ui_role', role); } catch { }
       const name = u.nombre || u.name || `${u.nombre || ''} ${u.apellido || ''}`.trim() || 'Usuario';
