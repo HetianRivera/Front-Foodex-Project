@@ -29,7 +29,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
   const [categoria, setCategoria] = useState('');
   const [imagenFile, setImagenFile] = useState(null);
   const [porcion, setPorcion] = useState(1);
-  const [gramajePorPorcion, setGramajePorPorcion] = useState(0);
   const [tiempo, setTiempo] = useState(0);
   const [tareaInicio, setTareaInicio] = useState('');
   // Técnicas de base y PCC removidos (no están en la API)
@@ -52,30 +51,59 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     // Control de UI: sólo una etapa abierta a la vez
     const [openStageIndex, setOpenStageIndex] = useState(0);
 
-    
-// Rehidratar desde localStorage al montar
-useEffect(() => {
-  try {
-    const savedOpen = localStorage.getItem('newRecipe.openStage');
-    if (savedOpen) {
-      const idx = STAGES.indexOf(savedOpen);
-      setOpenStageIndex(idx >= 0 ? idx : 0);
-    }
-  } catch (e) {
-    console.warn('No se pudo leer etapa abierta desde localStorage', e);
-  }
-}, []);
 
-// Persistir letra de etapa abierta en localStorage cuando cambie
-useEffect(() => {
-  try {
-    const letter = STAGES[openStageIndex] ?? '';
-    localStorage.setItem('newRecipe.openStage', letter);
-  } catch (e) {
-    console.warn('No se pudo guardar etapa abierta en localStorage', e);
-  }
-}, [openStageIndex]);
+    // Ejemplo dentro del componente (arriba del return)
 
+    // --- Estado / constantes existentes ---
+    const [openStageIndex, setOpenStageIndex] = useState(0);
+    const STAGES = ['A', 'B', 'C']; // ejemplo, usa los reales
+
+    // --- Cálculos derivados (de main) ---
+    const tiempoTotal = procesos.reduce(
+      (acc, etapa) => acc + (Number(etapa.tiempoEstimado) || 0),
+      0
+    );
+
+    const totalGramos = ingredientesCategorias.reduce((accCat, cat) => {
+      return accCat + cat.ingredientes.reduce((accIng, ing) => {
+        let cant = Number(ing.cantidad) || 0;
+        if (ing.unidad === 'kg') cant = cant * 1000; // convertir a gramos
+        return accIng + cant;
+      }, 0);
+    }, 0);
+
+    const gramosPorPorcion = porcion > 0 ? totalGramos / porcion : 0;
+
+    const getTiempoCoccionIngrediente = (nombre, ingEtapa) => {
+      const directo = Number(ingEtapa?.tiempoCoccion) || 0;
+      if (directo > 0) return directo;
+      const ref = savedIngredientes.find(si => si.nombre === nombre);
+      return Number(ref?.tiempoCoccion) || 0;
+    };
+
+    // --- Persistencia en localStorage (de feat) ---
+    // Proteger si hay SSR: 'window' solo existe en el cliente
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
+      try {
+        const savedOpen = localStorage.getItem('newRecipe.openStage');
+        if (savedOpen) {
+          const idx = STAGES.indexOf(savedOpen);
+          setOpenStageIndex(idx >= 0 ? idx : 0);
+        }
+      } catch (e) {
+        console.warn('No se pudo leer etapa abierta desde localStorage', e);
+      }
+    }, []);
+
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
+      try {
+        const letter = STAGES[openStageIndex] ?? '';
+        localStorage.setItem('newRecipe.openStage', letter);
+      } catch (e) {
+           console.warn('No se pudo guardar etapa abierta en localStorage', e);
+      }
 
     // Helpers de validación y manejo de inputs usados en onChange/onBlur
     const validateField = (field, value) => {
@@ -154,47 +182,160 @@ useEffect(() => {
         ingredientes: c.ingredientes.map((ingr,j)=> j===ingredientIndex ? { ...ingr, saved: false } : ingr)
       } : c));
     };
+    const updateTiempoEtapa = (etapaIndex, value) => {
+      setProcesos(prev => prev.map((p,i)=> {
+        if (i !== etapaIndex) return p;
 
+        const tiempoMaxIngrediente = Math.max(
+          ...p.ingredientesUsados.map(ingEtapa => getTiempoCoccionIngrediente(ingEtapa.nombre, ingEtapa)),
+          0
+        );
+
+        let nuevoTiempo = Number(value) || 0;
+
+        if (nuevoTiempo < tiempoMaxIngrediente) {
+          toast.error(
+            `El tiempo de la etapa ${p.etapa} no puede ser menor que ${tiempoMaxIngrediente} min (ingrediente más lento)`
+          );
+          nuevoTiempo = tiempoMaxIngrediente;
+        }
+
+        return { ...p, tiempoEstimado: nuevoTiempo };
+      }));
+    };
     const addIngredienteEtapa = (etapaIndex) => {
-      setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: [...p.ingredientesUsados,{ nombre:'', cantidad:0, unidad:'gr', saved:false }] } : p));
+      setProcesos(prev => prev.map((p,i)=> 
+        i===etapaIndex 
+          ? { ...p, ingredientesUsados: [...p.ingredientesUsados, { nombre:'', cantidad:0, unidad:'gr', saved:false }] } 
+          : p
+      ));
     };
     const updateIngredienteEtapa = (etapaIndex, ingredienteIndex, key, value) => {
-      setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: p.ingredientesUsados.map((ing,j)=> j===ingredienteIndex ? { ...ing, [key]: value } : ing) } : p));
+      setProcesos(prev => prev.map((p,i)=> {
+        if (i !== etapaIndex) return p;
+
+        return {
+          ...p,
+          ingredientesUsados: p.ingredientesUsados.map((ing,j)=> {
+            if (j !== ingredienteIndex) return ing;
+
+            // Caso especial: cambio de nombre → sincronizar unidad y tiempoCoccion desde catálogo
+            if (key === 'nombre') {
+              const ref = savedIngredientes.find(si => si.nombre === value);
+              if (ref) {
+                return {
+                  ...ing,
+                  nombre: ref.nombre,
+                  unidad: ref.unidad,
+                  tiempoCoccion: ing.tiempoCoccion || Number(ref.tiempoCoccion) || 0
+                };
+              }
+              return { ...ing, nombre: value };
+            }
+
+            // Caso especial: cambio de cantidad → control de stock
+            if (key === 'cantidad') {
+              const globalIng = savedIngredientes.find(si => si.nombre === ing.nombre);
+              if (!globalIng) {
+                return { ...ing, cantidad: Number(value) || 0 };
+              }
+
+              // Stock total en gramos
+              let total = Number(globalIng.cantidad) || 0;
+              if (globalIng.unidad === 'kg') total *= 1000;
+
+              // Cantidad ya usada en todas las etapas
+              const usado = prev.reduce((sum, etapa) => {
+                return sum + etapa.ingredientesUsados
+                  .filter(ei => ei.nombre === ing.nombre)
+                  .reduce((s, ei) => s + (Number(ei.cantidad) || 0), 0);
+              }, 0);
+
+              let nuevoValor = Number(value) || 0;
+              const usadoSinEste = usado - (Number(ing.cantidad) || 0);
+              const disponible = total - usadoSinEste;
+
+              if (nuevoValor > disponible) {
+                toast.error(`Solo quedan ${disponible} g de ${ing.nombre} disponibles`);
+                nuevoValor = disponible;
+              }
+
+              return { ...ing, cantidad: nuevoValor };
+            }
+
+            // Otros campos (unidad, tiempoCoccion, etc.)
+            return { ...ing, [key]: value };
+          })
+        };
+      }));
     };
     const removeIngredienteEtapa = (etapaIndex, ingredienteIndex) => {
       setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: p.ingredientesUsados.filter((_,j)=> j!==ingredienteIndex) } : p));
     };
-    const saveIngredienteEtapa = (etapaIndex, ingredienteIndex) => {
-      setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: p.ingredientesUsados.map((ing,j)=> j===ingredienteIndex ? { ...ing, saved:true } : ing) } : p));
-      toast.success('Ingrediente de etapa guardado');
-    };
+
     const toggleEditIngredienteEtapa = (etapaIndex, ingredienteIndex) => {
       setProcesos(prev => prev.map((p,i)=> i===etapaIndex ? { ...p, ingredientesUsados: p.ingredientesUsados.map((ing,j)=> j===ingredienteIndex ? { ...ing, saved:false } : ing) } : p));
     };
+    const saveIngredienteEtapa = (etapaIndex, ingredienteIndex) => {
+      setProcesos(prev => prev.map((p,i)=> {
+        if (i !== etapaIndex) return p;
 
+        const ing = p.ingredientesUsados[ingredienteIndex];
+        const tiempoCoccion = getTiempoCoccionIngrediente(ing.nombre, ing);
+        const tiempoEtapa = Number(p.tiempoEstimado) || 0;
+
+        if (tiempoCoccion > tiempoEtapa) {
+          toast.info(
+            `Ingrediente guardado, pero revisa el tiempo estimado de la etapa: ${ing.nombre} tarda ${tiempoCoccion} min y la etapa ${tiempoEtapa} min`
+          );
+        } else {
+          toast.success('Ingrediente de etapa guardado');
+        }
+
+    // Guardar una etapa con validación
     const saveEtapa = (etapaIndex) => {
       let ok = false;
-      setProcesos(prev => prev.map((p, i) => {
-        if (i !== etapaIndex) return p;
-        const titulo = String(p.titulo || '').trim();
-        const descripcion = String(p.descripcion || '').trim();
-        const tiempo = Number(p.tiempoEstimado);
-        if (!titulo || !descripcion || !Number.isFinite(tiempo) || tiempo <= 0) {
-          toast.error('Completa título, descripción y tiempo (>0) para guardar la etapa');
-          ok = false;
-          return p;
-       }
-       ok = true;
-       return { ...p, saved: true };
-  }));
-  if (ok) toast.success('Etapa guardada');
-};
+      setProcesos((prev) =>
+        prev.map((p, i) => {
+          if (i !== etapaIndex) return p;
+          const titulo = String(p.titulo || '').trim();
+          const descripcion = String(p.descripcion || '').trim();
+          const tiempo = Number(p.tiempoEstimado);
+          if (!titulo || !descripcion || !Number.isFinite(tiempo) || tiempo <= 0) {
+             toast.error('Completa título, descripción y tiempo (>0) para guardar la etapa');
+            ok = false;
+            return p;
+          }
+          ok = true;
+          return { ...p, saved: true };
+        })
+      );
+      if (ok) toast.success('Etapa guardada');
+    };
 
-const toggleEditEtapa = (etapaIndex) => {
-  setProcesos(prev => prev.map((p, i) => i === etapaIndex ? { ...p, saved: false } : p));
-};
+    // Volver una etapa a modo edición
+    const toggleEditEtapa = (etapaIndex) => {
+      setProcesos((prev) =>
+        prev.map((p, i) => (i === etapaIndex ? { ...p, saved: false } : p))
+      );
+    };
+
+    // Guardar un ingrediente usado dentro de una etapa específica
+    const saveIngredienteUsado = (etapaIndex, ingredienteIndex) => {
+      setProcesos((prev) =>
+        prev.map((p, i) => {
+          if (i !== etapaIndex) return p;
+          return {
+            ...p,
+            ingredientesUsados: (p.ingredientesUsados || []).map((ingr, j) =>
+              j === ingredienteIndex ? {          j === ingredienteIndex ? { ...ingr, saved: true } : ingr
+            ),
+          };
+        })
+      );
+
     const adjustToGramaje = () => {
-      const gramaje = Number(gramajePorPorcion);
+      const gramaje = Number(gramosPorPorcion);
       const porciones = Number(porcion);
       if (gramaje<=0 || porciones<=0) return;
       const flat = ingredientesCategorias.flatMap(c=>c.ingredientes);
@@ -268,6 +409,13 @@ const toggleEditEtapa = (etapaIndex) => {
         if (!tareaInicio) newErrors.tareaInicio = 'La tarea de inicio es obligatoria';
         if (!ingredientesCategorias.some(cat => cat.ingredientes.length > 0)) newErrors.ingredientes = 'Debes agregar al menos un ingrediente';
         if (!procesos.some(p => p.titulo.trim() && p.descripcion.trim() && p.tiempoEstimado)) newErrors.procesos = 'Debes completar al menos una etapa con título, tiempo y descripción';
+        // Validación: el tiempo de cada etapa no puede ser menor al mayor tiempo de cocción de sus ingredientes
+        procesos.forEach(p => {
+          const tiempoMaxIngrediente = Math.max(...p.ingredientesUsados.map(i => Number(i.tiempoCoccion) || 0), 0);
+          if (Number(p.tiempoEstimado) < tiempoMaxIngrediente) {
+            newErrors.procesos = `La etapa ${p.etapa} no puede durar menos que el ingrediente con mayor tiempo de cocción (${tiempoMaxIngrediente} min).`;
+          }
+        });
         // Validación UI: asegurar letras A-E únicas
         const phases2 = procesos.map(p=> String(p.etapa||'').trim().toUpperCase());
         const invalidPhases2 = phases2.filter(ph => !STAGE_SET.has(ph));
@@ -278,7 +426,41 @@ const toggleEditEtapa = (etapaIndex) => {
         if (!montaje.trim()) newErrors.montaje = 'Debes ingresar el montaje final';
         setErrors(newErrors);
         if (Object.keys(newErrors).length > 0) { toast.error('No se ha podido guardar la receta. Faltan campos obligatorios'); return; }
+        // Validación adicional: no permitir ingredientes sin nombre
+        if (ingredientesCategorias.some(cat =>
+              cat.ingredientes.some(ing => !ing.nombre || !ing.nombre.trim())
+        )) {
+          toast.error('Hay ingredientes sin nombre, corrige antes de guardar.');
+          return;
+        }
       } else { setErrors({}); }
+
+      let hasErrors = false;
+
+      procesos.forEach(p => {
+        const tiempoMaxIngrediente = Math.max(
+          ...p.ingredientesUsados.map(i => getTiempoCoccionIngrediente(i.nombre, i)),
+          0
+        );
+        if (Number(p.tiempoEstimado) < tiempoMaxIngrediente) {
+          hasErrors = true;
+          toast.error(
+            `La etapa ${p.etapa} no puede durar menos que el ingrediente con mayor tiempo de cocción (${tiempoMaxIngrediente} min).`
+          );
+        }
+      });
+
+      if (hasErrors) return; // ← detiene el guardado
+
+      // Validación: cada etapa debe durar al menos lo que tarda el ingrediente más lento
+      procesos.forEach(p => {
+        const tiempoMaxIngrediente = Math.max(...p.ingredientesUsados.map(i => Number(i.tiempoCoccion) || 0), 0);
+        if (Number(p.tiempoEstimado) < tiempoMaxIngrediente) {
+          setErrors(prev => ({ ...prev, procesos: `La etapa ${p.etapa} no puede durar menos que el ingrediente con mayor tiempo de cocción (${tiempoMaxIngrediente} min).` }));
+          toast.error(`La etapa ${p.etapa} no puede durar menos que el ingrediente con mayor tiempo de cocción (${tiempoMaxIngrediente} min).`);
+          return; // detiene el guardado
+        }
+      });
 
       const ingredientesFinal = ingredientesCategorias.map(cat => ({
         categoria: cat.categoria,
@@ -305,7 +487,7 @@ const toggleEditEtapa = (etapaIndex) => {
         tecnicas: savedTecnicas.filter(t=> t.nombre.trim()),
         // Campos removidos: tecnicasBase, puntosCriticos y utensilios
         montaje,
-        gramajePorPorcion: Number(gramajePorPorcion)||0
+        gramajePorPorcion: Number(gramosPorPorcion)||0
       };
       try {
         const saved = await createFullRecipe(receta);
@@ -341,7 +523,7 @@ const toggleEditEtapa = (etapaIndex) => {
         ['Nombre', nombre],
         ['Categoría', categoria],
         ['Porciones', String(porcion)],
-        ['Gramaje por porción (g)', String(gramajePorPorcion)],
+        ['Gramaje por porción (g)', String(gramosPorPorcion)],
         ['Tiempo (min)', String(tiempo)]
       ];
       const tableMeta = new Table({
@@ -444,10 +626,10 @@ const toggleEditEtapa = (etapaIndex) => {
                     {touched.categoria && errors.categoria && (<span className="text-red-500 text-sm">{errors.categoria}</span>)}
                   </div>
                   <div>
-                    <label className="block mb-1">Tiempo (min)</label>
-                    <Input type="number" value={tiempo} min={0} onChange={e => handleChange('tiempo', e.target.value, setTiempo)} onBlur={e => handleBlur('tiempo', e.target.value)} 
-                    className="bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300"/>
-                    {touched.tiempo && errors.tiempo && (<span className="text-red-500 text-sm">{errors.tiempo}</span>)}
+                    <label className="block mb-1">Tiempo total (min)</label>
+                    <span className="bg-slate-50 text-slate-900 dark:bg-slate-800 dark:text-slate-100 px-2 py-1 rounded">
+                      {tiempoTotal}
+                    </span>
                   </div>
                   <div>
                     <label className="block mb-1">Porciones</label>
@@ -456,8 +638,14 @@ const toggleEditEtapa = (etapaIndex) => {
                   </div>
                   <div>
                     <label className="block mb-1">Gramaje por porción (g)</label>
-                    <Input type="number" value={gramajePorPorcion} min={0} onChange={e=>setGramajePorPorcion(e.target.value)} 
-                    className="bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300"/>
+                    <Input
+                      type="number"
+                      value={gramosPorPorcion.toFixed(2)}
+                      readOnly
+                      className="bg-slate-50 text-slate-900 placeholder-slate-400 
+                                dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 
+                                transition-colors duration-300"
+                    />
                   </div>
                   <div className="col-span-3">
                     <label className="block mb-1">Tarea de Inicio (M.e.P.)</label>
@@ -573,9 +761,15 @@ const toggleEditEtapa = (etapaIndex) => {
                         </div>
                         <div className="col-span-1">
                           <label className="block mb-1">Tiempo Estimado (min)</label>
-                          <Input type="number" min={0} value={p.tiempoEstimado} onChange={e=>setProcesos(prev=> prev.map((x,i)=> i===pi? {...x,tiempoEstimado:e.target.value}:x))}
-                          disabled={!!p.saved}
-                          className='bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300'/>
+
+                          <Input
+                            type="number"
+                            min={0}
+                            value={p.tiempoEstimado}
+                            onChange={e => updateTiempoEtapa(pi, e.target.value)}
+                            disabled={!!p.saved} // mantiene la lógica de bloqueo
+                            className="bg-slate-50 text-slate-900 placeholder  className="bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300"
+
                         </div>
                         <div className="col-span-3">
                           <label className="block mb-1">Descripción</label>
@@ -598,6 +792,7 @@ const toggleEditEtapa = (etapaIndex) => {
                                     if(selected){
                                       updateIngredienteEtapa(pi,ii,'nombre',selected.nombre);
                                       updateIngredienteEtapa(pi,ii,'unidad',selected.unidad);
+                                      updateIngredienteEtapa(pi,ii,'tiempoCoccion',selected.tiempoCoccion);
                                     }}} disabled={!!iu.saved}>
                                     <option value="" className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">Seleccionar...</option>
                                     {savedIngredientes.map((ing,idx)=> <option key={idx} value={ing.nombre}>{ing.nombre} ({ing.categoria})</option>)}
@@ -670,11 +865,6 @@ const toggleEditEtapa = (etapaIndex) => {
                     </div>
                   ))}
                   {tecnicas.length===0 && <p className="text-sm text-slate-500">No hay técnica agregada.</p>}
-                  {savedTecnicas.length>0 && (
-                    <div className="pt-4 border-t">
-                      <p className="text-sm text-slate-600">Técnicas guardadas: {savedTecnicas.map(t=>t.nombre).join(', ')}</p>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
               {/* Sección de Utensilios Necesarios removida de la UI */}

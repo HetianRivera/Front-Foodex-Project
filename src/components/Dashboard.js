@@ -183,7 +183,11 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
               <div className="flex items-center gap-5">
                 <div className="bg-red-100 p-4 rounded-xl">
                   <BookOpen className="w-10 h-10 text-red-600" />
+
                 </div>
+
+              </div>
+
                 <div>
                   <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Semestre</p>
                   <p className="text-2xl">{recipes.length}/10</p>
@@ -274,11 +278,6 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                     <Badge variant="secondary" className="text-base px-3 py-1">
                       {recipe.categoria || 'Sin categoría'}
                     </Badge>
-                    {(Array.isArray(recipe.tecnicasBase) ? recipe.tecnicasBase.slice(0, 2) : []).map((tecnica, idx) => (
-                      <Badge key={idx} variant="outline" className="text-sm px-2 py-1">
-                        {tecnica}
-                      </Badge>
-                    ))}
                   </div>
 
                   {/* Botones */}
