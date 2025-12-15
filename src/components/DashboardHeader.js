@@ -1,6 +1,6 @@
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { Sun, Moon } from 'lucide-react';
+import { LogOut, Sun, Moon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 // Complete logo SVG with chef hat graphic
@@ -100,13 +100,13 @@ export function DashboardHeader({ user, onLogout, children }) {
             </Button>
           </div>
           <div className="flex items-center gap-6">
-            <div className="text-right flex flex-col justify-center gap-1">
+            <div className="text-right">
               <p className="text-lg text-slate-300">Bienvenido/a</p>
               <p className="text-2xl mb-2">{user.name}</p>
               <Badge variant={(user.role || '').toLowerCase().includes('profesor') ? 'default' : 'secondary'} className={`text-lg px-4 py-1 ${(user.role || '').toLowerCase().includes('profesor') ? 'bg-red-600 hover:bg-red-700 text-white border-red-600' : ''}`}>
                 {(user.role || '').toLowerCase().includes('profesor') ? 'Profesor' : 'Alumno'}
               </Badge>
-          </div>
+            </div>
             {onLogout && (
                <Button onClick={onLogout} size="lg" className="p-6 text-lg bg-red-600 hover:bg-red-700 text-white">
                  <LogOut className="w-6 h-6" />
