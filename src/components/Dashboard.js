@@ -172,7 +172,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
   const displayRecipes = updatedRecipes || recipes || [];
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out">
       <DashboardHeader user={user} onLogout={onLogout} />
 
       {/* Stats */}
@@ -224,7 +224,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
         </div>
 
         {/* Recipe List */}
-        <div>
+        <div className='flex-1 w-full max-w-6xl mx-auto px-4 py-6'>
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl text-slate-900 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Taller</h2>
             {user.role === 'profesor' && (
