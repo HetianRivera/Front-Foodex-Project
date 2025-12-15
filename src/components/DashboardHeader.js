@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 // Complete logo SVG with chef hat graphic
 function InlineLogo() {
   return (
-    <div className="relative size-full bg-white rounded-lg p-2 flex items-center justify-center">
+    <div className="relative size-full bg-white rounded-lg p-2 shadow-md">
       <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 100 115">
         <g clipPath="url(#clip0_184_230)">
           <path d="M0 114.72V95.18H15.91L13.43 99.86H5.43V103.11H15.43V107.46H5.38V114.72H0Z" fill="#C10F19" />
@@ -102,17 +102,18 @@ export function DashboardHeader({ user, onLogout, children }) {
           <div className="flex items-center gap-6">
             <div className="text-right flex flex-col justify-center gap-1">
               <p className="text-lg text-slate-300">Bienvenido/a</p>
-              <p className="text-2xl">{user.name}</p>
-              <Badge variant={user.role === 'profesor' ? 'default' : 'secondary'} className={`text-lg px-4 py-1 ${user.role === 'profesor' ? 'bg-red-600 text-white hover:bg-red-700' : ''}`}>
-                {user.role === 'profesor' ? 'Profesor' : 'Alumno'}
+              <p className="text-2xl mb-2">{user.name}</p>
+              <Badge variant={(user.role || '').toLowerCase().includes('profesor') ? 'default' : 'secondary'} className={`text-lg px-4 py-1 ${(user.role || '').toLowerCase().includes('profesor') ? 'bg-red-600 hover:bg-red-700 text-white border-red-600' : ''}`}>
+                {(user.role || '').toLowerCase().includes('profesor') ? 'Profesor' : 'Alumno'}
               </Badge>
           </div>
             {onLogout && (
-             <Button onClick={onLogout} size="lg" className="p-6 text-lg bg-red-600 hover:bg-red-700 text-white">
-               Salir
-            </Button>
-            )}
-          </div>
+               <Button onClick={onLogout} size="lg" className="p-6 text-lg bg-red-600 hover:bg-red-700 text-white">
+                 <LogOut className="w-6 h-6" />
+                 <span className="ml-2">Salir</span>
+               </Button>
+             )}
+           </div>
         </div>
         {children && <div className="mt-6">{children}</div>}
       </div>

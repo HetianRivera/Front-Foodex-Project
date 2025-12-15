@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardHeader } from './DashboardHeader';
 import { DashboardFooter } from './DashboardFooter';
 import { Input } from './ui/input';
@@ -46,11 +46,19 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     );
     const STAGES = ['A','B','C','D','E'];
     const [procesos, setProcesos] = useState(
-      STAGES.map(etapa => ({ etapa, titulo: '', descripcion: '', tiempoEstimado: 0, ingredientesUsados: [] }))
+      STAGES.map(etapa => ({ etapa, titulo: '', descripcion: '', tiempoEstimado: 0, ingredientesUsados: [],saved: false  }))
     );
     // Control de UI: sólo una etapa abierta a la vez
     const [openStageIndex, setOpenStageIndex] = useState(0);
 
+
+    // Ejemplo dentro del componente (arriba del return)
+
+    // --- Estado / constantes existentes ---
+    const [openStageIndex, setOpenStageIndex] = useState(0);
+    const STAGES = ['A', 'B', 'C']; // ejemplo, usa los reales
+
+    // --- Cálculos derivados (de main) ---
     const tiempoTotal = procesos.reduce(
       (acc, etapa) => acc + (Number(etapa.tiempoEstimado) || 0),
       0
@@ -73,6 +81,30 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       return Number(ref?.tiempoCoccion) || 0;
     };
 
+    // --- Persistencia en localStorage (de feat) ---
+    // Proteger si hay SSR: 'window' solo existe en el cliente
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
+      try {
+        const savedOpen = localStorage.getItem('newRecipe.openStage');
+        if (savedOpen) {
+          const idx = STAGES.indexOf(savedOpen);
+          setOpenStageIndex(idx >= 0 ? idx : 0);
+        }
+      } catch (e) {
+        console.warn('No se pudo leer etapa abierta desde localStorage', e);
+      }
+    }, []);
+
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
+      try {
+        const letter = STAGES[openStageIndex] ?? '';
+        localStorage.setItem('newRecipe.openStage', letter);
+      } catch (e) {
+           console.warn('No se pudo guardar etapa abierta en localStorage', e);
+      }
+
     // Helpers de validación y manejo de inputs usados en onChange/onBlur
     const validateField = (field, value) => {
       switch (field) {
@@ -87,7 +119,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         }
         case 'tareaInicio':
         case 'montaje':
-          return value !== undefined && value !== null && String(value).trim() === '' ? 'No deje solo espacios' : '';
+          return value !== undefined && value !== null && String(value).trim() === '' ? 'Este campo es obligatorio' : '';
         default:
           return '';
       }
@@ -260,14 +292,48 @@ export function NewRecipePage({ onCancel, onSave, user }) {
           toast.success('Ingrediente de etapa guardado');
         }
 
-        return {
-          ...p,
-          ingredientesUsados: p.ingredientesUsados.map((ingr,j)=>
-            j===ingredienteIndex ? { ...ingr, saved:true } : ingr
-          )
-        };
-      }));
+    // Guardar una etapa con validación
+    const saveEtapa = (etapaIndex) => {
+      let ok = false;
+      setProcesos((prev) =>
+        prev.map((p, i) => {
+          if (i !== etapaIndex) return p;
+          const titulo = String(p.titulo || '').trim();
+          const descripcion = String(p.descripcion || '').trim();
+          const tiempo = Number(p.tiempoEstimado);
+          if (!titulo || !descripcion || !Number.isFinite(tiempo) || tiempo <= 0) {
+             toast.error('Completa título, descripción y tiempo (>0) para guardar la etapa');
+            ok = false;
+            return p;
+          }
+          ok = true;
+          return { ...p, saved: true };
+        })
+      );
+      if (ok) toast.success('Etapa guardada');
     };
+
+    // Volver una etapa a modo edición
+    const toggleEditEtapa = (etapaIndex) => {
+      setProcesos((prev) =>
+        prev.map((p, i) => (i === etapaIndex ? { ...p, saved: false } : p))
+      );
+    };
+
+    // Guardar un ingrediente usado dentro de una etapa específica
+    const saveIngredienteUsado = (etapaIndex, ingredienteIndex) => {
+      setProcesos((prev) =>
+        prev.map((p, i) => {
+          if (i !== etapaIndex) return p;
+          return {
+            ...p,
+            ingredientesUsados: (p.ingredientesUsados || []).map((ingr, j) =>
+              j === ingredienteIndex ? {          j === ingredienteIndex ? { ...ingr, saved: true } : ingr
+            ),
+          };
+        })
+      );
+
     const adjustToGramaje = () => {
       const gramaje = Number(gramosPorPorcion);
       const porciones = Number(porcion);
@@ -528,7 +594,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
             <h1 className="text-3xl font-bold">Nueva Ficha Técnica</h1>
             <div className="flex gap-2">
               <Button variant="outline" onClick={onCancel}>Cancelar</Button>
-             <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleSave}>Guardar</Button>
+              <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleSave}>Guardar</Button>
               <Button variant="secondary" onClick={exportWord}>Exportar Word</Button>
             </div>
           </div>
@@ -670,33 +736,46 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                     <div key={p.etapa} className="space-y-4 rounded border">
                       <div className="flex items-center justify-between p-4 bg-slate-100 dark:bg-slate-800 rounded-t border-b border-slate-200 dark:border-slate-700 transition-colors duration-300">
                         <h4 className="text-lg font-semibold">Etapa {p.etapa}</h4>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline" onClick={() => setOpenStageIndex(openStageIndex === pi ? -1 : pi)}>
-                            {openStageIndex === pi ? 'Ingresar' : 'Expandir'}
-                          </Button>
-                        </div>
-                      </div>
+                        <div className="flex gap-2 items-center">
+                          {p.saved && <span className="text-xs text-green-600">Guardada</span>}
+                          <Button
+                          size="sm"
+                          onClick={() => (p.saved ? toggleEditEtapa(pi) : saveEtapa(pi))}
+                          variant={p.saved ? 'secondary' : 'default'}
+                          disabled={!p.saved && (!p.titulo.trim() || !p.descripcion.trim() || !(Number(p.tiempoEstimado) > 0))}
+                 >
+                          {p.saved ? 'Editar etapa' : 'Guardar etapa'}
+                 </Button>
+                 <Button size="sm" variant="outline" onClick={() => setOpenStageIndex(openStageIndex === pi ? -1 : pi)}>
+                   {openStageIndex === pi ? 'Ocultar' : 'Expandir'}
+                 </Button>
+                </div>
+                </div>
                       {openStageIndex === pi && (
                       <div className="grid grid-cols-3 gap-4 p-4 pt-0">
                         <div className="col-span-1">
                           <label className="block mb-1">Título</label>
                           <Input value={p.titulo} onChange={e=>setProcesos(prev=> prev.map((x,i)=> i===pi? {...x,titulo:e.target.value}:x))}
-                          className='bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300'/>
+                          disabled={!!p.saved}
+                          className='bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300'/>
                         </div>
                         <div className="col-span-1">
                           <label className="block mb-1">Tiempo Estimado (min)</label>
+
                           <Input
                             type="number"
                             min={0}
                             value={p.tiempoEstimado}
                             onChange={e => updateTiempoEtapa(pi, e.target.value)}
-                            className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300"
-                          />
+                            disabled={!!p.saved} // mantiene la lógica de bloqueo
+                            className="bg-slate-50 text-slate-900 placeholder  className="bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300"
+
                         </div>
                         <div className="col-span-3">
                           <label className="block mb-1">Descripción</label>
                           <Textarea rows={3} value={p.descripcion} onChange={e=>setProcesos(prev=> prev.map((x,i)=> i===pi? {...x,descripcion:e.target.value}:x))}
-                            className='bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300'/>
+                          disabled={!!p.saved}
+                            className='bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300'/>
                         </div>
                         <div className="col-span-3 space-y-3">
                           <div className="flex items-center justify-between">
@@ -769,7 +848,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                         <div>
                           <label className="block mb-1">Nombre de la Técnica</label>
                           <Input value={t.nombre} onChange={e=>updateTecnica(idx,'nombre',e.target.value)}
-                          className='bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300'/>
+                          className='bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300'/>
                         </div>
                         <div className="flex items-end justify-end gap-2">
                           <Button variant="secondary" size="sm" onClick={()=>saveTecnica(idx)} disabled={!t.nombre.trim() || !t.descripcion.trim() || t.saved}>Guardar</Button>
@@ -778,7 +857,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                         <div className="col-span-2">
                           <label className="block mb-1">Descripción</label>
                           <Textarea rows={4} value={t.descripcion} onChange={e=>updateTecnica(idx,'descripcion',e.target.value)}
-                            className='bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300'/>
+                           className='bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300'/>
                           {t.saved && <p className="text-xs text-green-600 mt-1">Guardada</p>}
                           {/* Vinculación manual eliminada: ahora se vincula automáticamente a ingredientes usados */}
                         </div>
@@ -797,7 +876,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                 <CardHeader><CardTitle>Montaje Final</CardTitle></CardHeader>
                 <CardContent>
                   <Textarea rows={5} value={montaje} onChange={e => handleChange('montaje', e.target.value, setMontaje)} onBlur={e => handleBlur('montaje', e.target.value)} placeholder="Descripción del montaje final"
-                    className='bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300'/>
+                    className='bg-slate-50 text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 transition-colors duration-300'/>
                   {touched.montaje && errors.montaje && (<span className="text-red-500 text-sm block mt-2">{errors.montaje}</span>)}
                 </CardContent>
               </Card>

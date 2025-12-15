@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { BookOpen, Clock, Users } from 'lucide-react';
+import { BookOpen, Clock, Users, Edit2, Trash2 } from 'lucide-react';
 import { DashboardHeader } from './DashboardHeader';
 import { DashboardFooter } from './DashboardFooter';
 import { EditRecipeModal } from './EditRecipeModal';
@@ -183,7 +183,11 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
               <div className="flex items-center gap-5">
                 <div className="bg-red-100 p-4 rounded-xl">
                   <BookOpen className="w-10 h-10 text-red-600" />
+
+                </div>
+
               </div>
+
                 <div>
                   <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Semestre</p>
                   <p className="text-2xl">{recipes.length}/10</p>
@@ -216,7 +220,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                 </div>
                 <div>
                   <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Rol Actual</p>
-                  <p className="text-2xl"> {user.role === 'profesor' ? 'Profesor' : 'Alumno'}</p>
+                  <p className="text-2xl">{(user.role || '').toLowerCase().includes('profesor') ? 'Profesor' : 'Alumno'}</p>
                 </div>
               </div>
             </CardContent>
@@ -227,8 +231,8 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
         <div>
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl text-slate-900 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Taller</h2>
-            {user.role === 'profesor' && (
-              <Button size="lg" className="text-xl px-8 py-6 bg-red-600 hover:bg-red-700 text-white" onClick={onStartNewRecipe}>+ Nueva Receta</Button>
+            {(user.role || '').toLowerCase().includes('profesor') && (
+             <Button size="lg" className="text-xl px-8 py-6 bg-red-600 hover:bg-red-700 text-white" onClick={onStartNewRecipe}>+ Nueva Receta</Button>
             )}
           </div>
 
@@ -285,7 +289,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                       Ver Detalles
                     </Button>
                     
-                    {user.role === 'profesor' && (
+                    {(user.role || '').toLowerCase().includes('profesor') && (
                       <>
                         <Button
                           variant="outline"
