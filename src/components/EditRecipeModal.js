@@ -550,6 +550,15 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                                   min={0}
                                   value={ing.tiempoCoccion || 0}
                                   onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', parseInt(e.target.value || '0', 10))}
+                                  max={p.tiempoEstimado}
+                                  step={1}
+                                  inputMode="numeric"
+                                  pattern="\\d*"
+                                  onBlur={e => {
+                                    const v = parseInt(e.target.value || '0', 10);
+                                    const clamped = Math.min(v, p.tiempoEstimado || 0);
+                                    if (v !== clamped) updateIngredienteEtapa(pi, ii, 'tiempoCoccion', clamped);
+                                  }}
                                   onKeyDown={preventDecimalKey}
                                   onPaste={preventDecimalPaste}
                                   className="text-sm"
