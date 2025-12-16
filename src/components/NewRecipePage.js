@@ -115,6 +115,21 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     setErrors(prev => ({ ...prev, [field]: err }));
   };
 
+  const preventDecimalKey = (e) => {
+    if (e.key === '.' || e.key === ',' || e.key === 'e' || e.key === 'E') {
+      e.preventDefault();
+      toast.error('Solo se permiten números enteros');
+    }
+  };
+
+  const preventDecimalPaste = (e) => {
+    const text = e.clipboardData?.getData('Text') || '';
+    if (/[.,eE]/.test(text) || !/^\s*\d+\s*$/.test(text)) {
+      e.preventDefault();
+      toast.error('Pega solo números enteros');
+    }
+  };
+
   const addIngredient = categoriaIndex => {
     setIngredientesCategorias(prev =>
       prev.map((cat, i) =>
@@ -138,7 +153,12 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         return {
           ...cat,
           ingredientes: cat.ingredientes.map((ing, j) =>
-            j === ingredientIndex ? { ...ing, [key]: value } : ing
+            j === ingredientIndex
+              ? {
+                  ...ing,
+                  [key]: key === 'cantidad' || key === 'tiempoCoccion' ? parseInt(value || '0', 10) : value,
+                }
+              : ing
           ),
         };
       })
@@ -254,7 +274,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               return { ...ing, nombre: value };
             }
 
-            return { ...ing, [key]: value };
+            return { ...ing, [key]: key === 'cantidad' || key === 'tiempoCoccion' ? parseInt(value || '0', 10) : value };
           }),
         };
       })
@@ -628,10 +648,15 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               <label className="block mb-1">Tiempo (min)</label>
               <Input
                 type="number"
+                step={1}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 min={0}
                 value={tiempo}
-                onChange={e => handleChange('tiempo', e.target.value, setTiempo)}
+                onChange={e => handleChange('tiempo', parseInt(e.target.value || '0', 10), setTiempo)}
                 onBlur={e => handleBlur('tiempo', e.target.value)}
+                onKeyDown={preventDecimalKey}
+                onPaste={preventDecimalPaste}
                 className={inputClass}
               />
               {touched.tiempo && errors.tiempo && (
@@ -643,9 +668,14 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               <label className="block mb-1">Porciones</label>
               <Input
                 type="number"
+                step={1}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 min={1}
                 value={porcion}
-                onChange={e => setPorcion(e.target.value)}
+                onChange={e => setPorcion(parseInt(e.target.value || '0', 10))}
+                onKeyDown={preventDecimalKey}
+                onPaste={preventDecimalPaste}
                 className={inputClass}
               />
             </div>
@@ -654,9 +684,14 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               <label className="block mb-1">Gramaje por porción (g)</label>
               <Input
                 type="number"
+                step={1}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 min={0}
                 value={gramajePorPorcion}
-                onChange={e => setGramajePorPorcion(e.target.value)}
+                onChange={e => setGramajePorPorcion(parseInt(e.target.value || '0', 10))}
+                onKeyDown={preventDecimalKey}
+                onPaste={preventDecimalPaste}
                 className={inputClass}
               />
             </div>
@@ -732,10 +767,15 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                         <label className="block mb-1">Cantidad</label>
                         <Input
                           type="number"
+                          step={1}
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           min={0}
                           value={ing.cantidad}
-                          onChange={e => updateIngredient(ci, ii, 'cantidad', e.target.value)}
+                          onChange={e => updateIngredient(ci, ii, 'cantidad', parseInt(e.target.value || '0', 10))}
                           disabled={!!ing.saved}
+                          onKeyDown={preventDecimalKey}
+                          onPaste={preventDecimalPaste}
                           className={inputClass}
                         />
                       </div>
@@ -832,15 +872,20 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                       <label className="block mb-1">Tiempo Estimado (min)</label>
                       <Input
                         type="number"
+                        step={1}
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         min={0}
                         value={p.tiempoEstimado}
                         onChange={e =>
                           setProcesos(prev =>
                             prev.map((x, i) =>
-                              i === pi ? { ...x, tiempoEstimado: e.target.value } : x
+                              i === pi ? { ...x, tiempoEstimado: parseInt(e.target.value || '0', 10) } : x
                             )
                           )
                         }
+                        onKeyDown={preventDecimalKey}
+                        onPaste={preventDecimalPaste}
                         className={inputClass}
                       />
                     </div>
@@ -903,10 +948,15 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                             <label className="block mb-1">Cantidad</label>
                             <Input
                               type="number"
+                              step={1}
+                              inputMode="numeric"
+                              pattern="[0-9]*"
                               min={0}
                               value={iu.cantidad}
-                              onChange={e => updateIngredienteEtapa(pi, ii, 'cantidad', e.target.value)}
+                              onChange={e => updateIngredienteEtapa(pi, ii, 'cantidad', parseInt(e.target.value || '0', 10))}
                               disabled={!!iu.saved}
+                              onKeyDown={preventDecimalKey}
+                              onPaste={preventDecimalPaste}
                               className={inputClass}
                             />
                           </div>
@@ -931,10 +981,15 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                             <label className="block mb-1">Tiempo cocción (min)</label>
                             <Input
                               type="number"
+                              step={1}
+                              inputMode="numeric"
+                              pattern="[0-9]*"
                               min={0}
                               value={iu.tiempoCoccion || 0}
-                              onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', e.target.value)}
+                              onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', parseInt(e.target.value || '0', 10))}
                               disabled={!!iu.saved}
+                              onKeyDown={preventDecimalKey}
+                              onPaste={preventDecimalPaste}
                               className={inputClass}
                             />
                           </div>
