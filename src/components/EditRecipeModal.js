@@ -231,7 +231,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto dark:bg-slate-900 dark:border-slate-800">
         <DialogHeader>
           <DialogTitle className="text-2xl">Editar Receta</DialogTitle>
         </DialogHeader>
@@ -255,7 +255,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                     value={formData.nombre}
                     onChange={handleChange}
                     placeholder="Ej: Filete a la Pimienta"
-                    className={`text-base ${errors.nombre ? 'border-red-500' : ''}`}
+                    className={`text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600 ${errors.nombre ? 'border-red-500' : ''}`}
                   />
                   {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>}
                 </div>
@@ -266,7 +266,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                     value={formData.codigo}
                     onChange={handleChange}
                     placeholder="Ej: REC-001"
-                    className={`text-base ${errors.codigo ? 'border-red-500' : ''}`}
+                    className={`text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600 ${errors.codigo ? 'border-red-500' : ''}`}
                   />
                   {errors.codigo && <p className="text-red-500 text-sm mt-1">{errors.codigo}</p>}
                 </div>
@@ -280,7 +280,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                     value={formData.categoria}
                     onChange={handleChange}
                     placeholder="Ej: Plato Principal"
-                    className="text-base"
+                    className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                   />
                 </div>
                 <div>
@@ -290,7 +290,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                     value={formData.rendimiento}
                     onChange={handleChange}
                     placeholder="Ej: 4 porciones"
-                    className="text-base"
+                    className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                   />
                 </div>
               </div>
@@ -309,7 +309,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                     onKeyDown={preventDecimalKey}
                     onPaste={preventDecimalPaste}
                     placeholder="0"
-                    className="text-base"
+                    className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                   />
                 </div>
                 <div>
@@ -325,7 +325,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                     onKeyDown={preventDecimalKey}
                     onPaste={preventDecimalPaste}
                     placeholder="1"
-                    className="text-base"
+                    className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                   />
                 </div>
                 <div>
@@ -341,7 +341,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                     onKeyDown={preventDecimalKey}
                     onPaste={preventDecimalPaste}
                     placeholder="0"
-                    className="text-base"
+                    className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                   />
                 </div>
               </div>
@@ -354,7 +354,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                   onChange={handleChange}
                   placeholder="Describe la tarea inicial..."
                   rows={3}
-                  className="text-base"
+                  className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                 />
               </div>
             </TabsContent>
@@ -370,7 +370,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                       size="sm"
                       variant="secondary"
                       onClick={() => addIngredient(ci)}
-                      className="flex items-center gap-1"
+                      className="flex items-center gap-1 dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 transition-colors duration-300 ease-in-out"
                     >
                       <Plus className="w-4 h-4" /> Agregar
                     </Button>
@@ -385,7 +385,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                             value={ing.nombre}
                             onChange={e => updateIngredient(ci, ii, 'nombre', e.target.value)}
                             placeholder="Ingrediente"
-                            className="text-sm"
+                            className="text-sm dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                           />
                         </div>
                         <div>
@@ -408,7 +408,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                           <select
                             value={ing.unidad}
                             onChange={e => updateIngredient(ci, ii, 'unidad', e.target.value)}
-                            className="w-full border rounded px-2 py-1 text-sm"
+                            className="w-full border rounded px-2 py-1 text-sm dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                           >
                             {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
                           </select>
@@ -419,14 +419,14 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                           variant="destructive"
                           size="sm"
                           onClick={() => removeIngredient(ci, ii)}
-                          className="w-full"
+                          className="w-full dark:hover:bg-red-700 transition-colors duration-300 ease-in-out"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     ))}
                     {cat.ingredientes.length === 0 && (
-                      <p className="text-sm text-slate-500">Sin ingredientes</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Sin ingredientes</p>
                     )}
                   </div>
                 </div>
@@ -458,7 +458,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                             value={p.titulo}
                             onChange={e => updateProcesoField(pi, 'titulo', e.target.value)}
                             placeholder="Ej: Preparación"
-                            className="text-base"
+                            className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                           />
                         </div>
                         <div>
@@ -485,7 +485,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                           onChange={e => updateProcesoField(pi, 'descripcion', e.target.value)}
                           placeholder="Describe los pasos de esta etapa..."
                           rows={3}
-                          className="text-base"
+                          className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                         />
                       </div>
 
@@ -497,7 +497,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                             size="sm"
                             variant="secondary"
                             onClick={() => addIngredienteEtapa(pi)}
-                            className="flex items-center gap-1"
+                            className="flex items-center gap-1 dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 transition-colors duration-300 ease-in-out"
                           >
                             <Plus className="w-4 h-4" /> Agregar
                           </Button>
@@ -512,7 +512,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                                   value={ing.nombre}
                                   onChange={e => updateIngredienteEtapa(pi, ii, 'nombre', e.target.value)}
                                   placeholder="Nombre"
-                                  className="text-sm"
+                                  className="text-sm dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                                 />
                               </div>
                               <div>
@@ -535,7 +535,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                                 <select
                                   value={ing.unidad}
                                   onChange={e => updateIngredienteEtapa(pi, ii, 'unidad', e.target.value)}
-                                  className="w-full border rounded px-2 py-1 text-sm"
+                                  className="w-full border rounded px-2 py-1 text-sm dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                                 >
                                   {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
                                 </select>
@@ -575,7 +575,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                             </div>
                           ))}
                           {p.ingredientesUsados.length === 0 && (
-                            <p className="text-sm text-slate-500">Sin ingredientes</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Sin ingredientes</p>
                           )}
                         </div>
                       </div>
@@ -595,7 +595,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                   onChange={handleChange}
                   placeholder="Describe cómo presentar el plato..."
                   rows={4}
-                  className="text-base"
+                  className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                 />
               </div>
 
@@ -607,7 +607,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                   onChange={handleChange}
                   placeholder="Describe los beneficios del plato..."
                   rows={3}
-                  className="text-base"
+                  className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                 />
               </div>
             </TabsContent>

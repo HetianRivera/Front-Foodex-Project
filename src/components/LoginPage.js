@@ -117,7 +117,7 @@ export function LoginPage({ onLogin }) {
               </div>
 
               <div>
-                <label className="block text-xl text-gray-700 mb-4 text-left">Contraseña</label>
+                <label className="block text-xl text-slate-700 dark:text-slate-200 mb-4 text-left transition-colors duration-500 ease-in-out">Contraseña</label>
                 <Input
                   type="password"
                   placeholder="Tu contraseña"
