@@ -1030,14 +1030,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
             {tecnicas.length === 0 && (
               <p className="text-sm text-slate-500">No hay técnica agregada.</p>
             )}
-
-            {savedTecnicas.length > 0 && (
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                <p className="text-sm text-slate-600 dark:text-slate-300">
-                  Técnicas guardadas: {savedTecnicas.map(t => t.nombre).join(', ')}
-                </p>
-              </div>
-            )}
           </CardContent>
         </Card>
 
