@@ -13,33 +13,124 @@ import {
 } from 'lucide-react';
 import { DashboardHeader } from './DashboardHeader';
 import { DashboardFooter } from './DashboardFooter';
+import { useEffect, useState } from 'react';
+import { getFullRecipe } from '../api/recipes';
+import { FullScreenLoader } from './FullScreenLoader';
+import { toast } from 'sonner';
 
 export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
-  const recipe = recipes.find(r => r.id === recipeId);
+  const [recipe, setRecipe] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!recipe) {
-    return <div>Receta no encontrada</div>;
-  }
+  const normalize = (data) => {
+    if (!data) return null;
+    // Map backend fields to UI-friendly fields used in this component
+    const r = {
+      id: data.id_receta ?? data.id ?? data.id_receta,
+      nombre: data.nombre_receta ?? data.nombre ?? data.nombre_receta,
+      codigo: data.codigo_receta ?? data.codigo ?? data.codigo_receta,
+      categoria: data.categoria ?? data.categoria_receta ?? data.categoria,
+      tiempo: data.tiempo ?? data.tiempo_minutos ?? data.tiempo_estimado ?? data.tiempo ?? 0,
+      porcion: data.porcion ?? data.porciones ?? data.porcion ?? 0,
+      rendimiento: data.rendimiento ?? null,
+      aporte: data.aporte ?? null,
+      montaje: data.detalle_montaje ?? data.montaje ?? data.detalle_montaje ?? '',
+      tareaInicio: data.tareaInicio ?? data.tarea_inicio ?? data.tareaInicio ?? '',
+      argumentacionComercial: data.argumentacionComercial ?? data.argumentacion_comercial ?? data.argumentacionComercial ?? '',
+      procesos: Array.isArray(data.procesos) ? data.procesos : (Array.isArray(data.etapas) ? data.etapas.map(e => ({
+        etapa: e.fase_etapa ?? e.fase ?? e.etapa,
+        titulo: e.nombre_etapa ?? e.titulo ?? e.nombre ?? '',
+        descripcion: e.instruccion_etapa ?? e.descripcion ?? e.instruccion ?? '',
+        tiempoEstimado: e.tiempo_minutos ?? e.tiempoCoccionMin ?? e.tiempoEstimado ?? null,
+        ingredientesUsados: Array.isArray(e.ingredientesUsados) ? e.ingredientesUsados : (Array.isArray(e.ingredientes) ? e.ingredientes : []),
+      })) : []),
+      ingredientes: Array.isArray(data.ingredientes) ? data.ingredientes : (Array.isArray(data.receta_ingredientes) ? data.receta_ingredientes : []),
+      tecnicas: Array.isArray(data.tecnicas) ? data.tecnicas : (Array.isArray(data.tecnica) ? data.tecnica : []),
+    };
+    // Calcular tiempo total como suma de tiempos de procesos si están disponibles
+    try {
+      const total = (r.procesos || []).reduce((s, p) => {
+        const t = Number(p.tiempoEstimado ?? p.tiempo_minutos ?? p.tiempo) || 0;
+        return s + t;
+      }, 0);
+      r.tiempo = total || (r.tiempo ?? 0);
+    } catch (e) {}
+
+    // Montaje: preferir campo detalle_montaje o montaje final en data
+    r.montaje = data.detalle_montaje ?? data.montaje ?? data.montaje_final ?? r.montaje ?? '';
+
+    // Asegurar tecnicas como array de objetos con nombre/descripcion normalizados
+    r.tecnicas = Array.isArray(r.tecnicas) ? r.tecnicas.map(t => ({
+      nombre: t?.nombre_tecnica ?? t?.nombre ?? t?.titulo ?? t?.name ?? '',
+      descripcion: t?.descripcion ?? t?.descripcion_tecnica ?? t?.detalle ?? '',
+      ...t
+    })) : [];
+
+    return r;
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoading(true);
+      // Primero intentar obtener del backend completo (detalle + relaciones)
+      try {
+        const data = await getFullRecipe(recipeId);
+        console.debug('[RecipeView] getFullRecipe raw:', data);
+        if (!mounted) return;
+        const norm = normalize(data);
+        console.debug('[RecipeView] normalized:', norm);
+        setRecipe(norm);
+      } catch (err) {
+        console.error('[RecipeView] getFullRecipe error:', err);
+        // Si falla (404 o similar), intentar buscar en `recipes` prop como fallback
+        try {
+          console.debug('[RecipeView] trying local fallback, recipes length:', (recipes || []).length);
+          const local = (recipes || []).find(r => (r.id === recipeId || r.id_receta === recipeId || String(r.id) === String(recipeId) || String(r.id_receta) === String(recipeId)));
+          if (local) {
+            console.debug('[RecipeView] found local recipe:', local);
+            setRecipe(normalize(local));
+          } else {
+            toast.error('No se encontró la receta en el servidor ni localmente');
+            setRecipe(null);
+          }
+        } catch (e) {
+          setRecipe(null);
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, [recipeId]);
+
+  if (loading) return <FullScreenLoader show={true} />;
+
+  if (!recipe) return <div className="p-8">Receta no encontrada</div>;
 
   const formatUnit = (cantidad, unidad) => {
+    const qty = Number(cantidad);
+    const q = Number.isFinite(qty) ? qty : null;
+    if (q === null) return '-';
     if (unidad === 'kg') {
-      return `${cantidad.toFixed(3)} kg`;
+      return `${q.toFixed(3)} kg`;
     } else if (unidad === 'gr') {
-      if (cantidad >= 1000) {
-        return `${(cantidad / 1000).toFixed(2)} kg (${cantidad} gr)`;
+      if (q >= 1000) {
+        return `${(q / 1000).toFixed(2)} kg (${q} gr)`;
       }
-      return `${cantidad} gr`;
-    } else if (unidad === 'lt') {
-      return `${cantidad.toFixed(3)} lt`;
+      return `${q} gr`;
+    } else if (unidad === 'lt' || unidad === 'l') {
+      return `${q.toFixed(3)} lt`;
     } else if (unidad === 'ml') {
-      if (cantidad >= 1000) {
-        return `${(cantidad / 1000).toFixed(2)} lt (${cantidad} ml)`;
+      if (q >= 1000) {
+        return `${(q / 1000).toFixed(2)} lt (${q} ml)`;
       }
-      return `${cantidad} ml`;
+      return `${q} ml`;
     } else if (unidad === 'u') {
-      return `${cantidad} unidad${cantidad > 1 ? 'es' : ''}`;
+      return `${q} unidad${q > 1 ? 'es' : ''}`;
     }
-    return `${cantidad} ${unidad}`;
+    return `${q} ${unidad || ''}`;
   };
 
   return (
@@ -105,7 +196,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             {/* Info Card */}
             <Card className="bg-blue-50 border-blue-200 border-2 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
               <CardContent className="pt-8 pb-8">
-                <div className="grid grid-cols-4 gap-6 text-center">
+                <div className="grid grid-cols-3 gap-6 text-center">
                   <div>
                     <p className="text-base text-slate-600 dark:text-slate-300 mb-2">Tiempo Total</p>
                     <div className="flex items-center justify-center gap-2">
@@ -118,14 +209,42 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                     <p className="text-3xl">{recipe.porcion}</p>
                   </div>
                   <div>
-                    <p className="text-base text-slate-600 dark:text-slate-300 mb-2">Rendimiento</p>
-                    <p className="text-3xl">{recipe.rendimiento}</p>
-                  </div>
-                  <div>
-                    <p className="text-base text-slate-600 dark:text-slate-300 mb-2">Calorías</p>
-                    <p className="text-3xl">{recipe.aporte}</p>
+                    <p className="text-base text-slate-600 dark:text-slate-300 mb-2">Etapas</p>
+                    <p className="text-3xl">{Array.isArray(recipe.procesos) ? recipe.procesos.length : 0}</p>
+                    <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+                      {(Array.isArray(recipe.procesos) ? recipe.procesos.slice(0,3) : []).map((p, i) => (
+                        <span key={i} className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-sm">{p.titulo || `Etapa ${p.etapa || i+1}`}</span>
+                      ))}
+                    </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Tarea de Inicio */}
+            {/* Etapas summary */}
+            <Card className="border-l-8 border-l-yellow-400 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
+              <CardHeader className="bg-yellow-50 dark:bg-yellow-950/20 pb-6 transition-colors duration-500">
+                <CardTitle className="text-2xl">📚 Etapas</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 pb-6">
+                {Array.isArray(recipe.procesos) && recipe.procesos.length > 0 ? (
+                  <div className="grid gap-3">
+                    {recipe.procesos.map((p, i) => (
+                      <div key={i} className="p-3 bg-white dark:bg-slate-950 rounded-lg border-2 border-yellow-200 dark:border-yellow-800/40">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-lg font-semibold">{p.titulo || `Etapa ${p.etapa || i+1}`}</div>
+                            <div className="text-sm text-slate-600 dark:text-slate-300">{p.descripcion || ''}</div>
+                          </div>
+                          <div className="text-sm text-slate-500">{p.tiempoEstimado ? `${p.tiempoEstimado} min` : ''}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-slate-600 dark:text-slate-300">No hay etapas registradas</div>
+                )}
               </CardContent>
             </Card>
 
@@ -140,9 +259,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             </Card>
 
             {/* Procesos - TEXTO OPTIMIZADO PARA TABLET */}
-            {recipe.procesos
-              .filter(p => p.titulo && p.descripcion && p.tiempoEstimado)
-              .map((proceso, idx) => (
+            {(Array.isArray(recipe.procesos) ? recipe.procesos : []).map((proceso, idx) => (
                 <Card 
                   key={idx} 
                   className="border-l-8 border-l-primary shadow-lg dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500"
@@ -176,7 +293,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                         <span>Ingredientes para esta etapa:</span>
                       </h4>
                       <div className="grid grid-cols-2 gap-4">
-                        {proceso.ingredientesUsados.map((ing, ingIdx) => (
+                        {(Array.isArray(proceso.ingredientesUsados) ? proceso.ingredientesUsados : []).map((ing, ingIdx) => (
                           <div 
                             key={ingIdx} 
                             className="bg-white dark:bg-slate-950 p-5 rounded-lg border-2 border-amber-300 dark:border-amber-800/60 transition-colors duration-500"
@@ -184,7 +301,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                             <p className="text-lg leading-relaxed">
                               <span className="block mb-1">{ing.nombre}</span>
                               <span className="text-2xl text-primary block">
-                                {formatUnit(ing.cantidad, ing.unidad)}
+                                {formatUnit(ing.cantidad ?? ing.cantidad_ingrediente ?? ing.amount, ing.unidad ?? ing.unidad_name ?? ing.unit)}
                               </span>
                             </p>
                           </div>
@@ -223,7 +340,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                             <TableCell className="text-xl py-5">{ing.nombre}</TableCell>
                             <TableCell className="text-xl py-5">
                               <Badge variant="outline" className="text-lg px-4 py-2">
-                                {formatUnit(ing.cantidad, ing.unidad)}
+                                {formatUnit(ing.cantidad ?? ing.cantidad_ingrediente ?? ing.amount, ing.unidad ?? ing.unidad_name ?? ing.unit)}
                               </Badge>
                             </TableCell>
                           </TableRow>

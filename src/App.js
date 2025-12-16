@@ -7,7 +7,7 @@ import { NewRecipePage } from "./components/NewRecipePage";
 import { toast } from "sonner";
 import HealthCheck from "./components/HealthCheck";
 import { clearAuth, getStoredSession } from "./api/auth";
-import { listRecipes } from "./api/recipes";
+import { listRecipes, listUserRecipes } from "./api/recipes";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -78,11 +78,28 @@ export default function App() {
     const loadRecipesFromAPI = async () => {
       setLoadingRecipes(true);
       try {
-        //const data = await listRecipes();
-        //const recipesList = Array.isArray(data) ? data : (data?.results || []);
-        //setRecipes(recipesList);
+        // Intentar obtener id de usuario del objeto `user` o de localStorage
+        let uid = user?.user?.id_usuario ?? user?.user?.id ?? null;
+        if (!uid) {
+          try {
+            const raw = localStorage.getItem('foodex_user');
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              uid = parsed?.id_usuario ?? parsed?.id ?? uid;
+            }
+          } catch {}
+        }
 
-        setRecipes([]);
+        let recipesList = [];
+        if (uid) {
+          recipesList = await listUserRecipes(uid);
+        } else {
+          const data = await listRecipes();
+          recipesList = Array.isArray(data) ? data : (data?.results || []);
+        }
+
+        // Guardar todas las recetas recibidas (sin recorte)
+        setRecipes(recipesList || []);
       } catch (err) {
         console.error('Error cargando recetas:', err);
         toast.error('Error al cargar las recetas');
@@ -121,12 +138,7 @@ export default function App() {
   };
 
   const handleStartNewRecipe = () => {
-    if (recipes.length >= 10) {
-      try {
-        toast && toast.error("Límite de 10 recetas del semestre alcanzado");
-      } catch {}
-      return;
-    }
+    // Ya no limitamos la creación de recetas — permitir siempre crear una nueva
     setCreatingNewRecipe(true);
   };
 

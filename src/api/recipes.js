@@ -246,6 +246,54 @@ export async function listRecipes(params = {}) {
   return tryRequestOverCandidates('get', () => '', params);
 }
 
+// Obtener recetas asociadas a un usuario. Algunos backends exponen
+// las recetas del usuario en la ruta /api/v1/recetas/<id>/ (id = id_usuario).
+// Esta función intenta esa variante y devuelve siempre un array.
+export async function listUserRecipes(userId) {
+  if (!userId) throw new Error('userId requerido para listar recetas por usuario');
+
+  // 1) Intentar la ruta directa /recetas/<userId>/ (algunos backends usan este patrón)
+  const idSeg = `${encodeURIComponent(userId)}/`;
+  try {
+    const data = await tryRequestOverCandidates('get', () => idSeg, {});
+    return Array.isArray(data) ? data : (data?.results || []);
+  } catch (err) {
+    const st = err?.response?.status;
+    // Si el error no es 404/405, es probablemente un problema real (auth, 500), propagar
+    if (st && st !== 404 && st !== 405) throw err;
+  }
+
+  // 2) Fallback: pedir al endpoint de listado con distintos parámetros de filtro comunes
+  const tryParams = [
+    { id_usuario: userId },
+    { usuario: userId },
+    { user: userId },
+    { owner: userId },
+  ];
+
+  for (const params of tryParams) {
+    try {
+      const data = await tryRequestOverCandidates('get', () => '', params);
+      const list = Array.isArray(data) ? data : (data?.results || []);
+      if (list && list.length >= 0) return list;
+    } catch (err) {
+      const st = err?.response?.status;
+      if (st && st !== 404 && st !== 405) throw err;
+      // otherwise probar siguiente variante
+    }
+  }
+
+  // 3) Último recurso: llamar al listado sin filtros (devuelve todas) y filtrar localmente
+  try {
+    const data = await tryRequestOverCandidates('get', () => '', {});
+    const list = Array.isArray(data) ? data : (data?.results || []);
+    // Filtrar por campos comunes que pueden contener el id de usuario
+    return (list || []).filter(r => (r.id_usuario == userId) || (r.id_usuario == undefined && (r.usuario == userId || r.user == userId || r.id == userId)));
+  } catch (err) {
+    throw err;
+  }
+}
+
 export async function updateRecipe(id, patch) {
   const idSeg = `${encodeURIComponent(id)}/`;
   // Si el patch incluye ingredientes en la forma de UI, normalizarlos antes de enviar
@@ -273,6 +321,193 @@ const RELATED_ENDPOINTS = {
   etapaIngredientes: ['/api/v1/etapa-ingredientes/'],
   ingredienteTecnica: ['/api/v1/ingrediente-tecnica/'],
 };
+
+// Helper para GET contra una lista de endpoints probando detalle (/id/) y filtros comunes
+async function tryGetOverCandidates(urls, id) {
+  let lastErr = null;
+  // Primero intentar detalle: /endpoint/<id>/
+  for (const u of urls) {
+    try {
+      const url = u.replace(/\/+$/, '/') + encodeURIComponent(id) + '/';
+      const resp = await api.get(url);
+      return resp.data;
+    } catch (err) {
+      lastErr = err;
+      const st = err?.response?.status;
+      if (st && st !== 404 && st !== 405) throw err;
+    }
+  }
+
+  const paramNames = ['id_receta','receta','receta_id','id','id_etapa','id_ingrediente','ingrediente','recipe','id_recipe'];
+  for (const pname of paramNames) {
+    for (const u of urls) {
+      try {
+        const resp = await api.get(u, { params: { [pname]: id } });
+        const data = Array.isArray(resp.data) ? resp.data : (resp.data?.results || resp.data);
+        return data;
+      } catch (err) {
+        lastErr = err;
+        const st = err?.response?.status;
+        if (st && st !== 404 && st !== 405) throw err;
+      }
+    }
+  }
+
+  throw lastErr || new Error('No related endpoint matched');
+}
+
+// Helper: intentar obtener detalle por id (GET /endpoint/<id>/) sobre varios candidatos
+async function tryFetchDetail(urls, id) {
+  let lastErr = null;
+  for (const u of urls) {
+    try {
+      const url = u.replace(/\/+$/, '/') + encodeURIComponent(id) + '/';
+      const resp = await api.get(url);
+      return resp.data;
+    } catch (err) {
+      lastErr = err;
+      const st = err?.response?.status;
+      if (st && st !== 404 && st !== 405) throw err;
+    }
+  }
+  throw lastErr || new Error('Detail not found');
+}
+
+// Utility: dado un array, devolver solo los items que tengan alguna de las
+// keys igual al valor buscado (coerción flexible con == para strings/numeros).
+function filterListByKeys(list, keys, value) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(item => {
+    for (const k of keys) {
+      try {
+        if (item == null) continue;
+        const v = item[k];
+        if (v == null) continue;
+        if (String(v) === String(value) || v == value) return true;
+      } catch (e) {
+        continue;
+      }
+    }
+    return false;
+  });
+}
+
+// Armar la receta completa consultando las tablas relacionadas si el endpoint
+// de detalle no incluye las relaciones. Devuelve un objeto con campos
+// compatibles con la UI (`ingredientes` como array de categorías con `ingredientes`,
+// `procesos` como array de etapas con `ingredientesUsados`, `tecnicas`, etc.).
+export async function getFullRecipe(recetaId) {
+  if (!recetaId) throw new Error('recetaId requerido');
+  const base = await getRecipe(recetaId).catch(() => null);
+  const result = base ? { ...base } : { id_receta: recetaId };
+
+  // 1) receta-ingredientes -> ingredientes (detallados)
+  let recetaIngs = [];
+  try {
+    const data = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, recetaId);
+    recetaIngs = Array.isArray(data) ? data : (data?.results || []);
+    // Filtrar solo los enlaces que pertenezcan a esta receta
+    recetaIngs = filterListByKeys(recetaIngs, ['id_receta','receta','receta_id','id_receta_id','id_receta_ingrediente','recetaIngrediente','id_receta_ingrediente'], recetaId);
+  } catch (e) {
+    recetaIngs = [];
+  }
+
+  const ingredientesById = {};
+  const categoriaMap = {};
+  for (const ri of recetaIngs) {
+    const ingId = ri.id_ingrediente ?? ri.ingrediente ?? ri.id;
+    let ingDetail = null;
+    if (ingId) {
+      try { ingDetail = await tryFetchDetail(RELATED_ENDPOINTS.ingredientes, ingId); } catch (e) { ingDetail = null; }
+    }
+    const nombre = ingDetail?.nombre || ri.nombre || ri.nombre_ingrediente || ri.nombre_ingrediente || null;
+    const cantidad = ri.cantidad_ingrediente ?? ri.cantidad ?? ri.cantidad_ingrediente ?? null;
+    const unidad = ingDetail?.unidad || ri.unidad || null;
+    const categoria = ingDetail?.categoria || ri.categoria || 'Sin categoría';
+    const ingObj = { id_ingrediente: ingId, nombre, cantidad, unidad, ...(ingDetail || {}) };
+    ingredientesById[ingId] = ingObj;
+    if (!categoriaMap[categoria]) categoriaMap[categoria] = [];
+    categoriaMap[categoria].push(ingObj);
+  }
+
+  result.ingredientes = Object.keys(categoriaMap).map(cat => ({ categoria: cat, ingredientes: categoriaMap[cat] }));
+
+  // 2) receta-etapas -> procesos (etapas) y sus ingredientes (etapa-ingredientes)
+  let recetaEtapas = [];
+  try {
+    const data = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaEtapas, recetaId);
+    recetaEtapas = Array.isArray(data) ? data : (data?.results || []);
+    recetaEtapas = filterListByKeys(recetaEtapas, ['id_receta','receta','receta_id','id_receta_etapa','id_receta'], recetaId);
+  } catch (e) {
+    recetaEtapas = [];
+  }
+
+  const procesos = [];
+  for (const re of recetaEtapas) {
+    const etapaId = re.id_etapa ?? re.id_etapa_id ?? re.id_etapa ?? re.id ?? re.id_receta_etapa;
+    let etapaDetail = null;
+    if (etapaId) {
+      try { etapaDetail = await tryFetchDetail(RELATED_ENDPOINTS.etapas, etapaId); } catch (e) { etapaDetail = null; }
+    }
+    // Obtener ingredientes usados en la etapa
+    let etapaIngs = [];
+    try {
+      const data = await tryGetOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, etapaId);
+      etapaIngs = Array.isArray(data) ? data : (data?.results || []);
+      etapaIngs = filterListByKeys(etapaIngs, ['id_etapa','etapa','id_etapa_id','id_etapa_ingrediente','id_etapa_ingrediente'], etapaId);
+    } catch (e) {
+      etapaIngs = [];
+    }
+    const ingredientesUsados = (etapaIngs || []).map(ei => {
+      const ingId = ei.id_ingrediente ?? ei.ingrediente ?? ei.id;
+      const baseIng = ingredientesById[ingId] || {};
+      return {
+        nombre: baseIng.nombre || ei.nombre || null,
+        cantidad: ei.cantidad_ingrediente ?? ei.cantidad ?? baseIng.cantidad ?? null,
+        unidad: baseIng.unidad || ei.unidad || null,
+      };
+    });
+
+    procesos.push({
+      etapa: re.fase_etapa ?? re.fase ?? etapaDetail?.fase ?? (re.fase ?? null),
+      titulo: etapaDetail?.nombre_etapa ?? etapaDetail?.nombre ?? re.nombre_etapa ?? re.titulo ?? '',
+      descripcion: etapaDetail?.instruccion_etapa ?? etapaDetail?.instruccion ?? re.instruccion_etapa ?? re.instruccion ?? '',
+      tiempoEstimado: etapaDetail?.tiempo_minutos ?? etapaDetail?.tiempoCoccionMin ?? re.tiempo_minutos ?? (re.tiempo ?? null),
+      ingredientesUsados,
+    });
+  }
+  result.procesos = procesos;
+
+  // 3) Técnicas: intentar ligar técnicas a partir de ingrediente-tecnica
+  const tecnicaIds = new Set();
+  try {
+    // Obtener links ingrediente-tecnica para los ingredientes de la receta
+    const allIngIds = Object.keys(ingredientesById).filter(Boolean);
+    for (const ingId of allIngIds) {
+      try {
+        const links = await tryGetOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, ingId).catch(() => []);
+        const arr = Array.isArray(links) ? links : (links?.results || []);
+        // Filtrar por id_ingrediente para evitar enlaces globales
+        const filtered = filterListByKeys(arr, ['id_ingrediente','ingrediente','id'], ingId);
+        for (const l of filtered) {
+          const tid = l.id_tecnica ?? l.tecnica ?? l.id ?? l.id_tecnica_id;
+          if (tid) tecnicaIds.add(tid);
+        }
+      } catch (e) {}
+    }
+  } catch (e) {}
+
+  const tecnicas = [];
+  for (const tid of Array.from(tecnicaIds)) {
+    try {
+      const t = await tryFetchDetail(RELATED_ENDPOINTS.tecnicas, tid).catch(() => null);
+      if (t) tecnicas.push(t);
+    } catch (e) {}
+  }
+  result.tecnicas = tecnicas;
+
+  return result;
+}
 
 async function postOverCandidates(urls, data) {
   let lastErr;

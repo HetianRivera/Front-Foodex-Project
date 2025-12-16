@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -170,6 +170,17 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
   };
 
   const displayRecipes = updatedRecipes || recipes || [];
+  // Lista completa de recetas (sin recorte). Paginador se encarga de mostrar por página.
+  // Paginación: mostrar 8 recetas por página
+  const ITEMS_PER_PAGE = 8;
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil((displayRecipes || []).length / ITEMS_PER_PAGE));
+  useEffect(() => {
+    // Resetear a primera página cuando cambie la lista
+    setPage(1);
+  }, [displayRecipes.length]);
+  const pageStart = (page - 1) * ITEMS_PER_PAGE;
+  const pageRecipes = (displayRecipes || []).slice(pageStart, pageStart + ITEMS_PER_PAGE);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out">
@@ -188,7 +199,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
 
                 <div>
                   <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Semestre</p>
-                  <p className="text-2xl">{recipes.length}/10</p>
+                  <p className="text-2xl">{displayRecipes.length}</p>
                 </div>
               </div>
             </CardContent>
@@ -234,8 +245,8 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-8">
-            {displayRecipes.map((recipe) => {
+            <div className="grid grid-cols-2 gap-8">
+            {pageRecipes.map((recipe) => {
               // Usar id_receta como key principal (es el ID en backend)
               const recipeKey = recipe.id_receta || recipe.id;
               return (
@@ -319,6 +330,15 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
               </Card>
             );
             })}
+          </div>
+
+          {/* Paginador */}
+          <div className="flex items-center justify-center gap-3 mt-8">
+            <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>Anterior</Button>
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <Button key={i} variant={i + 1 === page ? 'secondary' : 'ghost'} onClick={() => setPage(i + 1)}>{i + 1}</Button>
+            ))}
+            <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Siguiente</Button>
           </div>
         </div>
       </div>
