@@ -75,6 +75,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       titulo: '',
       descripcion: '',
       tiempoEstimado: 0,
+      saved: false,
       ingredientesUsados: [],
     }))
   );
@@ -194,6 +195,19 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       tiempoCoccion: Number(ing.tiempoCoccion) || 0,
     };
 
+    // ensure total used in procesos doesn't exceed this quantity
+    const usedAcrossProcesos = procesos.reduce((acc, p) => {
+      const used = (p.ingredientesUsados || [])
+        .filter(iu => iu.nombre === toSave.nombre)
+        .reduce((s, iu) => s + (Number(iu.cantidad) || 0), 0);
+      return acc + used;
+    }, 0);
+
+    if (usedAcrossProcesos > toSave.cantidad) {
+      toast.error(`No se puede guardar: ya se usan ${usedAcrossProcesos} ${toSave.unidad} de ${toSave.nombre} en las etapas`);
+      return;
+    }
+
     setSavedIngredientes(prev => {
       const idx = prev.findIndex(x => x.nombre === toSave.nombre);
       if (idx >= 0) {
@@ -252,6 +266,69 @@ export function NewRecipePage({ onCancel, onSave, user }) {
   };
 
   const updateIngredienteEtapa = (etapaIndex, ingredienteIndex, key, value) => {
+    // If changing cantidad, ensure not exceeding saved ingrediente total across etapas
+    if (key === 'cantidad') {
+      const newVal = parseInt(value || '0', 10);
+
+      // find total available for this ingredient from savedIngredientes
+      const ingredientName =
+        procesos[etapaIndex]?.ingredientesUsados?.[ingredienteIndex]?.nombre || null;
+
+      const savedRef = savedIngredientes.find(si => si.nombre === ingredientName);
+      const totalAvailable = savedRef ? Number(savedRef.cantidad) || 0 : null;
+
+      if (totalAvailable !== null) {
+        // compute total used in other etapas (including this ingrediente other entries)
+        let usedOther = 0;
+        procesos.forEach((p, pi) => {
+          p.ingredientesUsados.forEach((iu, ii) => {
+            if (iu.nombre === ingredientName) {
+              if (pi === etapaIndex && ii === ingredienteIndex) return; // skip current
+              usedOther += Number(iu.cantidad) || 0;
+            }
+          });
+        });
+
+        const remaining = totalAvailable - usedOther;
+        if (newVal > remaining) {
+          toast.error(`Cantidad excede disponibilidad. Quedan ${remaining}${savedRef.unidad || ''}`);
+          // clamp to remaining (not negative)
+          const clamped = Math.max(0, remaining);
+          // apply clamped value
+          setProcesos(prev =>
+            prev.map((p, i) => {
+              if (i !== etapaIndex) return p;
+              return {
+                ...p,
+                ingredientesUsados: p.ingredientesUsados.map((ing, j) => (j === ingredienteIndex ? { ...ing, cantidad: clamped } : ing)),
+              };
+            })
+          );
+          return;
+        }
+      }
+
+      // If changing tiempoCoccion, ensure it does not exceed the etapa's tiempoEstimado
+      if (key === 'tiempoCoccion') {
+        const newVal = parseInt(value || '0', 10);
+        const etapaTiempo = procesos[etapaIndex]?.tiempoEstimado || 0;
+        if (newVal > etapaTiempo) {
+          toast.error(`El tiempo de cocción no puede exceder el tiempo estimado de la etapa (${etapaTiempo} min)`);
+          const clamped = Math.max(0, etapaTiempo);
+          setProcesos(prev =>
+            prev.map((p, i) => {
+              if (i !== etapaIndex) return p;
+              return {
+                ...p,
+                ingredientesUsados: p.ingredientesUsados.map((ing, j) => (j === ingredienteIndex ? { ...ing, tiempoCoccion: clamped } : ing)),
+              };
+            })
+          );
+          return;
+        }
+      }
+    }
+
     setProcesos(prev =>
       prev.map((p, i) => {
         if (i !== etapaIndex) return p;
@@ -321,6 +398,45 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       )
     );
   };
+
+  const saveProceso = (index) => {
+    const p = procesos[index];
+    if (!p) return;
+    if (!p.titulo?.trim() || !p.descripcion?.trim() || !p.tiempoEstimado) {
+      toast.error('Completa título, descripción y tiempo para guardar la etapa');
+      return;
+    }
+    setProcesos(prev => prev.map((x, i) => (i === index ? { ...x, saved: true } : x)));
+    toast.success('Etapa guardada');
+  };
+
+  const toggleEditProceso = (index) => {
+    setProcesos(prev => prev.map((x, i) => (i === index ? { ...x, saved: false } : x)));
+  };
+
+  // keep total tiempo synced with sum of etapas
+  useEffect(() => {
+    const total = procesos.reduce((s, p) => s + (Number(p.tiempoEstimado) || 0), 0);
+    setTiempo(total);
+  }, [procesos]);
+
+  // compute gramaje por porcion from savedIngredientes (convert basic units)
+  useEffect(() => {
+    const unitToGrams = (cantidad, unidad) => {
+      if (!unidad) return 0;
+      const u = unidad.toLowerCase();
+      if (u === 'kg') return (Number(cantidad) || 0) * 1000;
+      if (u === 'gr') return Number(cantidad) || 0;
+      if (u === 'lt') return (Number(cantidad) || 0) * 1000;
+      if (u === 'ml') return Number(cantidad) || 0;
+      // 'u' (units) not counted as grams
+      return 0;
+    };
+
+    const totalGrams = (savedIngredientes || []).reduce((acc, ing) => acc + unitToGrams(ing.cantidad, ing.unidad), 0);
+    const perPortion = porcion && porcion > 0 ? Math.round(totalGrams / porcion) : 0;
+    setGramajePorPorcion(perPortion);
+  }, [savedIngredientes, porcion]);
 
 
   const addTecnica = () => {
@@ -653,8 +769,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                 pattern="[0-9]*"
                 min={0}
                 value={tiempo}
-                onChange={e => handleChange('tiempo', parseInt(e.target.value || '0', 10), setTiempo)}
-                onBlur={e => handleBlur('tiempo', e.target.value)}
+                disabled
                 onKeyDown={preventDecimalKey}
                 onPaste={preventDecimalPaste}
                 className={inputClass}
@@ -689,7 +804,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                 pattern="[0-9]*"
                 min={0}
                 value={gramajePorPorcion}
-                onChange={e => setGramajePorPorcion(parseInt(e.target.value || '0', 10))}
+                disabled
                 onKeyDown={preventDecimalKey}
                 onPaste={preventDecimalPaste}
                 className={inputClass}
@@ -844,13 +959,22 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               <div key={p.etapa} className="space-y-4 rounded border border-slate-200 dark:border-slate-700">
                 <div className="flex items-center justify-between p-4 bg-slate-100 dark:bg-slate-800 rounded-t border-b border-slate-200 dark:border-slate-700 transition-colors duration-300">
                   <h4 className="text-lg font-semibold">Etapa {p.etapa}</h4>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setOpenStageIndex(openStageIndex === pi ? -1 : pi)}
-                  >
-                    {openStageIndex === pi ? 'Cerrar' : 'Expandir'}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => (p.saved ? toggleEditProceso(pi) : saveProceso(pi))}
+                    >
+                      {p.saved ? 'Editar' : 'Guardar'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setOpenStageIndex(openStageIndex === pi ? -1 : pi)}
+                    >
+                      {openStageIndex === pi ? 'Cerrar' : 'Expandir'}
+                    </Button>
+                  </div>
                 </div>
 
                 {openStageIndex === pi && (
@@ -859,6 +983,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                       <label className="block mb-1">Título</label>
                       <Input
                         value={p.titulo}
+                        disabled={!!p.saved}
                         onChange={e =>
                           setProcesos(prev =>
                             prev.map((x, i) => (i === pi ? { ...x, titulo: e.target.value } : x))
@@ -877,10 +1002,21 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                         pattern="[0-9]*"
                         min={0}
                         value={p.tiempoEstimado}
+                        disabled={!!p.saved}
                         onChange={e =>
                           setProcesos(prev =>
                             prev.map((x, i) =>
-                              i === pi ? { ...x, tiempoEstimado: parseInt(e.target.value || '0', 10) } : x
+                              i === pi ? (() => {
+                                const newTiempo = parseInt(e.target.value || '0', 10);
+                                return {
+                                  ...x,
+                                  tiempoEstimado: newTiempo,
+                                  ingredientesUsados: (x.ingredientesUsados || []).map(ing => ({
+                                    ...ing,
+                                    tiempoCoccion: Math.min(Number(ing.tiempoCoccion) || 0, newTiempo)
+                                  }))
+                                };
+                              })() : x
                             )
                           )
                         }
@@ -895,6 +1031,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                       <Textarea
                         rows={3}
                         value={p.descripcion}
+                        disabled={!!p.saved}
                         onChange={e =>
                           setProcesos(prev =>
                             prev.map((x, i) =>
@@ -909,7 +1046,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                     <div className="col-span-3 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="font-medium">Ingredientes usados</p>
-                        <Button size="sm" variant="secondary" onClick={() => addIngredienteEtapa(pi)}>
+                        <Button size="sm" variant="secondary" onClick={() => addIngredienteEtapa(pi)} disabled={!!p.saved}>
                           Agregar
                         </Button>
                       </div>
@@ -919,12 +1056,12 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                           <div className="col-span-2">
                             <label className="block mb-1">Ingrediente</label>
 
-                            {savedIngredientes.length > 0 ? (
+                              {savedIngredientes.length > 0 ? (
                               <select
                                 className={selectClass}
                                 value={iu.nombre}
                                 onChange={e => updateIngredienteEtapa(pi, ii, 'nombre', e.target.value)}
-                                disabled={!!iu.saved}
+                                disabled={!!iu.saved || !!p.saved}
                               >
                                 <option value="">Seleccionar...</option>
                                 {savedIngredientes.map((ing, idx) => (
@@ -933,12 +1070,12 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                                   </option>
                                 ))}
                               </select>
-                            ) : (
+                              ) : (
                               <Input
                                 value={iu.nombre}
                                 onChange={e => updateIngredienteEtapa(pi, ii, 'nombre', e.target.value)}
                                 placeholder="Primero guarda ingredientes"
-                                disabled={!!iu.saved}
+                                disabled={!!iu.saved || !!p.saved}
                                 className={inputClass}
                               />
                             )}
@@ -946,29 +1083,29 @@ export function NewRecipePage({ onCancel, onSave, user }) {
 
                           <div>
                             <label className="block mb-1">Cantidad</label>
-                            <Input
-                              type="number"
-                              step={1}
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              min={0}
-                              value={iu.cantidad}
-                              onChange={e => updateIngredienteEtapa(pi, ii, 'cantidad', parseInt(e.target.value || '0', 10))}
-                              disabled={!!iu.saved}
-                              onKeyDown={preventDecimalKey}
-                              onPaste={preventDecimalPaste}
-                              className={inputClass}
-                            />
+                              <Input
+                                type="number"
+                                step={1}
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                min={0}
+                                value={iu.cantidad}
+                                onChange={e => updateIngredienteEtapa(pi, ii, 'cantidad', parseInt(e.target.value || '0', 10))}
+                                disabled={!!iu.saved || !!p.saved}
+                                onKeyDown={preventDecimalKey}
+                                onPaste={preventDecimalPaste}
+                                className={inputClass}
+                              />
                           </div>
 
                           <div>
                             <label className="block mb-1">Unidad</label>
-                            <select
-                              className={selectClass}
-                              value={iu.unidad}
-                              onChange={e => updateIngredienteEtapa(pi, ii, 'unidad', e.target.value)}
-                              disabled={!!iu.saved}
-                            >
+                              <select
+                                className={selectClass}
+                                value={iu.unidad}
+                                onChange={e => updateIngredienteEtapa(pi, ii, 'unidad', e.target.value)}
+                                disabled={!!iu.saved || !!p.saved}
+                              >
                               {UNIDADES.map(u => (
                                 <option key={u} value={u}>
                                   {u}
@@ -979,19 +1116,28 @@ export function NewRecipePage({ onCancel, onSave, user }) {
 
                           <div>
                             <label className="block mb-1">Tiempo cocción (min)</label>
-                            <Input
-                              type="number"
-                              step={1}
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              min={0}
-                              value={iu.tiempoCoccion || 0}
-                              onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', parseInt(e.target.value || '0', 10))}
-                              disabled={!!iu.saved}
-                              onKeyDown={preventDecimalKey}
-                              onPaste={preventDecimalPaste}
-                              className={inputClass}
-                            />
+                              <Input
+                                type="number"
+                                step={1}
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                min={0}
+                                value={iu.tiempoCoccion || 0}
+                                onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', parseInt(e.target.value || '0', 10))}
+                                max={p.tiempoEstimado}
+                                step={1}
+                                inputMode="numeric"
+                                pattern="\\d*"
+                                onBlur={e => {
+                                  const v = parseInt(e.target.value || '0', 10);
+                                  const clamped = Math.min(v, p.tiempoEstimado || 0);
+                                  if (v !== clamped) updateIngredienteEtapa(pi, ii, 'tiempoCoccion', clamped);
+                                }}
+                                disabled={!!iu.saved || !!p.saved}
+                                onKeyDown={preventDecimalKey}
+                                onPaste={preventDecimalPaste}
+                                className={inputClass}
+                              />
                           </div>
 
                           <div className="flex gap-2 justify-end">
