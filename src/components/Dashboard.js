@@ -186,12 +186,11 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
 
                 </div>
 
-              </div>
-
                 <div>
                   <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Semestre</p>
                   <p className="text-2xl">{recipes.length}/10</p>
                 </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -231,7 +230,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl text-slate-900 dark:text-slate-200 transition-colors duration-300 ease-in-out">Recetas del Taller</h2>
             {(user.role || '').toLowerCase().includes('profesor') && (
-             <Button size="lg" className="text-xl px-8 py-6 bg-red-600 hover:bg-red-700 text-white" onClick={onStartNewRecipe}>+ Nueva Receta</Button>
+             <Button size="lg" className="text-xl px-8 py-6 bg-red-600 hover:bg-red-700 text-white dark:bg-red-800 dark:hover:bg-red-700 transition-colors duration-300 ease-in-out" onClick={onStartNewRecipe}>+ Nueva Receta</Button>
             )}
           </div>
 

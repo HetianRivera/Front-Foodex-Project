@@ -50,7 +50,7 @@ export function DeleteRecipeDialog({ recipe, isOpen, onClose, onConfirm }) {
             type="button"
             onClick={handleConfirm}
             disabled={loading}
-            className="text-lg px-6 py-3 bg-red-600 hover:bg-red-700 text-white"
+            className="text-lg px-6 py-3 bg-red-600 hover:bg-red-700 text-white dark:bg-red-800 dark:hover:bg-red-700 transition-colors duration-300 ease-in-out"
           >
             {loading ? 'Eliminando...' : 'Sí, Eliminar'}
           </Button>
