@@ -82,7 +82,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
         i === categoriaIndex
           ? {
               ...cat,
-              ingredientes: [...cat.ingredientes, { nombre: '', cantidad: 0, unidad: 'gr', tiempoCoccion: 0 }]
+              ingredientes: [...cat.ingredientes, { nombre: '', cantidad: 0, unidad: 'gr' }]
             }
           : cat
       )
@@ -129,7 +129,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
     setProcesos(prev =>
       prev.map((p, i) =>
         i === stageIndex
-          ? { ...p, ingredientesUsados: [...p.ingredientesUsados, { nombre: '', cantidad: 0, unidad: 'gr' }] }
+          ? { ...p, ingredientesUsados: [...p.ingredientesUsados, { nombre: '', cantidad: 0, unidad: 'gr', tiempoCoccion: 0 }] }
           : p
       )
     );
@@ -193,8 +193,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
           ingredientes: cat.ingredientes.map(ing => ({
             nombre: ing.nombre,
             cantidad: Number(ing.cantidad) || 0,
-            unidad: ing.unidad,
-            tiempoCoccion: Number(ing.tiempoCoccion) || 0
+            unidad: ing.unidad
           }))
         })),
         procesos: procesos.map(p => ({
@@ -205,7 +204,8 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
           ingredientesUsados: p.ingredientesUsados.map(i => ({
             nombre: i.nombre,
             cantidad: Number(i.cantidad) || 0,
-            unidad: i.unidad
+            unidad: i.unidad,
+            tiempoCoccion: Number(i.tiempoCoccion) || 0
           }))
         }))
       });
@@ -348,7 +348,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
 
                   <div className="space-y-2">
                     {cat.ingredientes.map((ing, ii) => (
-                      <div key={ii} className="grid grid-cols-6 gap-2 items-end bg-slate-50 p-3 rounded">
+                      <div key={ii} className="grid grid-cols-5 gap-2 items-end bg-slate-50 p-3 rounded">
                         <div className="col-span-2">
                           <label className="block text-xs font-medium mb-1">Nombre</label>
                           <Input
@@ -378,16 +378,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                             {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
                           </select>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1">T. Cocción</label>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={ing.tiempoCoccion || 0}
-                            onChange={e => updateIngredient(ci, ii, 'tiempoCoccion', e.target.value)}
-                            className="text-sm"
-                          />
-                        </div>
+                        {/* Tiempo de cocción ahora se edita en Etapas (ingredientes usados) */}
                         <Button
                           type="button"
                           variant="destructive"
@@ -474,7 +465,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
 
                         <div className="space-y-2">
                           {p.ingredientesUsados.map((ing, ii) => (
-                            <div key={ii} className="grid grid-cols-5 gap-2 items-end bg-slate-50 p-3 rounded">
+                            <div key={ii} className="grid grid-cols-6 gap-2 items-end bg-slate-50 p-3 rounded">
                               <div className="col-span-2">
                                 <label className="block text-xs font-medium mb-1">Ingrediente</label>
                                 <Input
@@ -503,6 +494,16 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                                 >
                                   {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
                                 </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium mb-1">T. Cocción</label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={ing.tiempoCoccion || 0}
+                                  onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', e.target.value)}
+                                  className="text-sm"
+                                />
                               </div>
                               <Button
                                 type="button"

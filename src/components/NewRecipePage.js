@@ -123,7 +123,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               ...cat,
               ingredientes: [
                 ...cat.ingredientes,
-                { nombre: '', cantidad: 0, unidad: 'gr', tiempoCoccion: 0, saved: false },
+                { nombre: '', cantidad: 0, unidad: 'gr', saved: false },
               ],
             }
           : cat
@@ -396,7 +396,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         nombre: ing.nombre,
         cantidad: Number(ing.cantidad) || 0,
         unidad: ing.unidad,
-        tiempoCoccion: Number(ing.tiempoCoccion) || 0,
       })),
     }));
 
@@ -757,18 +756,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                         </select>
                       </div>
 
-                      <div>
-                        <label className="block mb-1">Tiempo cocción (min)</label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={ing.tiempoCoccion || 0}
-                          onChange={e => updateIngredient(ci, ii, 'tiempoCoccion', e.target.value)}
-                          disabled={!!ing.saved}
-                          className={inputClass}
-                        />
-                      </div>
-
                       <div className="flex gap-2 justify-end">
                         {!ing.saved ? (
                           <Button size="sm" onClick={() => saveIngrediente(ci, ii)}>
@@ -883,7 +870,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                       </div>
 
                       {p.ingredientesUsados.map((iu, ii) => (
-                        <div key={ii} className="grid grid-cols-6 gap-2 items-end">
+                        <div key={ii} className="grid grid-cols-7 gap-2 items-end">
                           <div className="col-span-2">
                             <label className="block mb-1">Ingrediente</label>
 
@@ -938,6 +925,18 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                                 </option>
                               ))}
                             </select>
+                          </div>
+
+                          <div>
+                            <label className="block mb-1">Tiempo cocción (min)</label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={iu.tiempoCoccion || 0}
+                              onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', e.target.value)}
+                              disabled={!!iu.saved}
+                              className={inputClass}
+                            />
                           </div>
 
                           <div className="flex gap-2 justify-end">
