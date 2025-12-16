@@ -302,6 +302,50 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     );
   };
 
+  const adjustToGramaje = () => {
+    const gramaje = Number(gramajePorPorcion);
+    const porciones = Number(porcion);
+
+    if (gramaje <= 0 || porciones <= 0) return;
+
+    const flat = ingredientesCategorias.flatMap(c => c.ingredientes);
+    if (flat.length === 0) return;
+
+    const totalActual = flat.reduce((sum, ing) => {
+      let cant = Number(ing.cantidad) || 0;
+      if (ing.unidad === 'kg') cant *= 1000;
+      return sum + cant;
+    }, 0);
+
+    const totalDeseado = gramaje * porciones;
+    if (totalActual === 0) return;
+
+    const factor = totalDeseado / totalActual;
+
+    setIngredientesCategorias(prev =>
+      prev.map(cat => ({
+        ...cat,
+        ingredientes: cat.ingredientes.map(ing => {
+          let cant = Number(ing.cantidad) || 0;
+          let unidad = ing.unidad;
+
+          if (unidad === 'kg') cant *= 1000;
+
+          let nuevaCant = cant * factor;
+
+          if (nuevaCant >= 1000) {
+            unidad = 'kg';
+            nuevaCant = nuevaCant / 1000;
+          } else {
+            unidad = 'gr';
+          }
+
+          return { ...ing, cantidad: +nuevaCant.toFixed(2), unidad };
+        }),
+      }))
+    );
+  };
+
   const addTecnica = () => {
     setTecnicas(prev => {
       if (prev.length >= 1) {
@@ -699,6 +743,9 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Ingredientes por Categoría</CardTitle>
+            <Button variant="outline" onClick={adjustToGramaje}>
+              Ajustar a Gramaje
+            </Button>
           </CardHeader>
 
           <CardContent className="space-y-8">
