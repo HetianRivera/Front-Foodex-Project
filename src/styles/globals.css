@@ -27,6 +27,17 @@
   --muted-foreground: #717182;
 }
 
+/* Remove native number input spin controls so users type integers directly */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield; /* Firefox */
+}
+
 .dark {
   --background: #0f1115;
   --foreground: #ffffff;
