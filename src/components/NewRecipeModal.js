@@ -27,12 +27,27 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
     setFormData(prev => ({
       ...prev,
       [name]: name === 'tiempo' || name === 'porcion' || name === 'aporte' 
-        ? Number(value) || 0
+        ? parseInt(value || '0', 10) || 0
         : value
     }));
     // Limpiar error
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const preventDecimalKey = (e) => {
+    if (e.key === '.' || e.key === ',' || e.key === 'e' || e.key === 'E') {
+      e.preventDefault();
+      toast.error('Solo se permiten números enteros');
+    }
+  };
+
+  const preventDecimalPaste = (e) => {
+    const text = e.clipboardData?.getData('Text') || '';
+    if (/[.,eE]/.test(text) || !/^\s*\d+\s*$/.test(text)) {
+      e.preventDefault();
+      toast.error('Pega solo números enteros');
     }
   };
 
@@ -144,8 +159,13 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
               <Input
                 name="tiempo"
                 type="number"
+                step={1}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={formData.tiempo}
                 onChange={handleChange}
+                onKeyDown={preventDecimalKey}
+                onPaste={preventDecimalPaste}
                 className="text-base"
               />
             </div>
@@ -154,8 +174,13 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
               <Input
                 name="porcion"
                 type="number"
+                step={1}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={formData.porcion}
                 onChange={handleChange}
+                onKeyDown={preventDecimalKey}
+                onPaste={preventDecimalPaste}
                 className="text-base"
               />
             </div>
@@ -164,8 +189,13 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
               <Input
                 name="aporte"
                 type="number"
+                step={1}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={formData.aporte}
                 onChange={handleChange}
+                onKeyDown={preventDecimalKey}
+                onPaste={preventDecimalPaste}
                 className="text-base"
               />
             </div>

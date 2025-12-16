@@ -59,11 +59,26 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
     setFormData(prev => ({
       ...prev,
       [name]: name === 'tiempo' || name === 'porcion' || name === 'aporte'
-        ? Number(value) || 0
+        ? parseInt(value || '0', 10) || 0
         : value
     }));
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const preventDecimalKey = (e) => {
+    if (e.key === '.' || e.key === ',' || e.key === 'e' || e.key === 'E') {
+      e.preventDefault();
+      toast.error('Solo se permiten números enteros');
+    }
+  };
+
+  const preventDecimalPaste = (e) => {
+    const text = e.clipboardData?.getData('Text') || '';
+    if (/[.,eE]/.test(text) || !/^\s*\d+\s*$/.test(text)) {
+      e.preventDefault();
+      toast.error('Pega solo números enteros');
     }
   };
 
@@ -286,8 +301,13 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                   <Input
                     name="tiempo"
                     type="number"
+                    step={1}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={formData.tiempo}
                     onChange={handleChange}
+                    onKeyDown={preventDecimalKey}
+                    onPaste={preventDecimalPaste}
                     placeholder="0"
                     className="text-base"
                   />
@@ -297,8 +317,13 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                   <Input
                     name="porcion"
                     type="number"
+                    step={1}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={formData.porcion}
                     onChange={handleChange}
+                    onKeyDown={preventDecimalKey}
+                    onPaste={preventDecimalPaste}
                     placeholder="1"
                     className="text-base"
                   />
@@ -308,8 +333,13 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                   <Input
                     name="aporte"
                     type="number"
+                    step={1}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={formData.aporte}
                     onChange={handleChange}
+                    onKeyDown={preventDecimalKey}
+                    onPaste={preventDecimalPaste}
                     placeholder="0"
                     className="text-base"
                   />
@@ -362,9 +392,14 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                           <label className="block text-xs font-medium mb-1">Cantidad</label>
                           <Input
                             type="number"
+                            step={1}
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             min={0}
                             value={ing.cantidad}
-                            onChange={e => updateIngredient(ci, ii, 'cantidad', e.target.value)}
+                            onChange={e => updateIngredient(ci, ii, 'cantidad', parseInt(e.target.value || '0', 10))}
+                            onKeyDown={preventDecimalKey}
+                            onPaste={preventDecimalPaste}
                             className="text-sm"
                           />
                         </div>
@@ -430,9 +465,14 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                           <label className="block text-sm font-medium mb-2">Tiempo (min)</label>
                           <Input
                             type="number"
+                            step={1}
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             min={0}
                             value={p.tiempoEstimado}
-                            onChange={e => updateProcesoField(pi, 'tiempoEstimado', e.target.value)}
+                            onChange={e => updateProcesoField(pi, 'tiempoEstimado', parseInt(e.target.value || '0', 10))}
+                            onKeyDown={preventDecimalKey}
+                            onPaste={preventDecimalPaste}
                             className="text-base"
                           />
                         </div>
@@ -479,9 +519,14 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                                 <label className="block text-xs font-medium mb-1">Cantidad</label>
                                 <Input
                                   type="number"
+                                  step={1}
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
                                   min={0}
                                   value={ing.cantidad}
-                                  onChange={e => updateIngredienteEtapa(pi, ii, 'cantidad', e.target.value)}
+                                  onChange={e => updateIngredienteEtapa(pi, ii, 'cantidad', parseInt(e.target.value || '0', 10))}
+                                  onKeyDown={preventDecimalKey}
+                                  onPaste={preventDecimalPaste}
                                   className="text-sm"
                                 />
                               </div>
@@ -499,9 +544,14 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                                 <label className="block text-xs font-medium mb-1">T. Cocción</label>
                                 <Input
                                   type="number"
+                                  step={1}
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
                                   min={0}
                                   value={ing.tiempoCoccion || 0}
-                                  onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', e.target.value)}
+                                  onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', parseInt(e.target.value || '0', 10))}
+                                  onKeyDown={preventDecimalKey}
+                                  onPaste={preventDecimalPaste}
                                   className="text-sm"
                                 />
                               </div>
