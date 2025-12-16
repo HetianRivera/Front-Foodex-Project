@@ -378,7 +378,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
 
                   <div className="space-y-2">
                     {cat.ingredientes.map((ing, ii) => (
-                      <div key={ii} className="grid grid-cols-5 gap-2 items-end bg-slate-50 p-3 rounded">
+                      <div key={ii} className="grid grid-cols-5 gap-2 items-end bg-slate-50 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
                         <div className="col-span-2">
                           <label className="block text-xs font-medium mb-1">Nombre</label>
                           <Input
@@ -400,7 +400,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                             onChange={e => updateIngredient(ci, ii, 'cantidad', parseInt(e.target.value || '0', 10))}
                             onKeyDown={preventDecimalKey}
                             onPaste={preventDecimalPaste}
-                            className="text-sm"
+                            className="text-sm dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                           />
                         </div>
                         <div>
@@ -473,7 +473,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                             onChange={e => updateProcesoField(pi, 'tiempoEstimado', parseInt(e.target.value || '0', 10))}
                             onKeyDown={preventDecimalKey}
                             onPaste={preventDecimalPaste}
-                            className="text-base"
+                            className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                           />
                         </div>
                       </div>
@@ -505,7 +505,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
 
                         <div className="space-y-2">
                           {p.ingredientesUsados.map((ing, ii) => (
-                            <div key={ii} className="grid grid-cols-6 gap-2 items-end bg-slate-50 p-3 rounded">
+                            <div key={ii} className="grid grid-cols-6 gap-2 items-end bg-slate-50 p-3 rounded dark:bg-slate-900 dark:border-slate-800">
                               <div className="col-span-2">
                                 <label className="block text-xs font-medium mb-1">Ingrediente</label>
                                 <Input
@@ -527,7 +527,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                                   onChange={e => updateIngredienteEtapa(pi, ii, 'cantidad', parseInt(e.target.value || '0', 10))}
                                   onKeyDown={preventDecimalKey}
                                   onPaste={preventDecimalPaste}
-                                  className="text-sm"
+                                  className="text-sm dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                                 />
                               </div>
                               <div>
@@ -561,7 +561,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                                   }}
                                   onKeyDown={preventDecimalKey}
                                   onPaste={preventDecimalPaste}
-                                  className="text-sm"
+                                  className="text-sm dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                                 />
                               </div>
                               <Button
@@ -569,6 +569,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                                 variant="destructive"
                                 size="sm"
                                 onClick={() => removeIngredienteEtapa(pi, ii)}
+                                className="w-full dark:hover:bg-red-700 transition-colors duration-300 ease-in-out"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>

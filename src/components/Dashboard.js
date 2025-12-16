@@ -246,36 +246,33 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                 <CardHeader className="pb-4">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <CardTitle 
-                      className="text-2xl line-clamp-2 leading-tight cursor-pointer hover:text-primary"
+                      className="text-2xl line-clamp-2 leading-tight cursor-pointer hover:text-primary transition-colors duration-300 ease-in-out"
                       onClick={() => onSelectRecipe(recipe.id || recipe.id_receta)}
                     >
                       {recipe.nombre || recipe.nombre_receta}
                     </CardTitle>
-                    <Badge variant="outline" className="text-base px-3 py-1">
+                    <Badge variant="outline" className="text-base px-3 py-1 transition-colors duration-300 ease-in-out">
                       {recipe.codigo || recipe.codigo_receta}
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                  <p className="text-lg text-slate-600 line-clamp-2 leading-relaxed">
+                  <p className="text-lg text-slate-600 line-clamp-2 leading-relaxed dark:text-slate-300 transition-colors duration-300 ease-in-out">
                     {recipe.argumentacionComercial || 'Sin descripción'}
                   </p>
                   
                   <div className="flex items-center gap-6 text-base text-slate-600">
                     <div className="flex items-center gap-2">
-                      <Clock className="w-5 h-5" />
+                      <Clock className="w-5 h-5 dark:text-slate-200 transition-colors duration-300 ease-in-out" />
                       <span className="text-lg dark:text-slate-200 transition-colors duration-300 ease-in-out">{recipe.tiempo} min</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Users className="w-5 h-5" />
+                      <Users className="w-5 h-5 dark:text-slate-200 transition-colors duration-300 ease-in-out" />
                       <span className="text-lg dark:text-slate-200 transition-colors duration-300 ease-in-out">{recipe.porcion} porción</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="secondary" className="text-base px-3 py-1">
-                      {recipe.categoria || 'Sin categoría'}
-                    </Badge>
                     {(Array.isArray(recipe.tecnicasBase) ? recipe.tecnicasBase.slice(0, 2) : []).map((tecnica, idx) => (
                       <Badge key={idx} variant="outline" className="text-sm px-2 py-1">
                         {tecnica}
@@ -286,7 +283,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   {/* Botones */}
                   <div className="flex gap-3 mt-4 pt-4 border-t">
                     <Button 
-                      className="flex-1 text-lg py-5"
+                      className="flex-1 text-lg py-5 hover:bg-slate-100 hover:text-black hover:border-black dark:hover:bg-black dark:hover:text-white dark:hover:border-white transition-colors duration-300 ease-in-out"
                       onClick={() => onSelectRecipe(recipe.id || recipe.id_receta)}
                     >
                       Ver Detalles
@@ -297,7 +294,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                         <Button
                           variant="outline"
                           size="lg"
-                          className="px-4 py-5 text-blue-600 border-blue-300 hover:bg-blue-50"
+                          className="px-4 py-5 text-blue-600 border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900"
                           onClick={(e) => handleEditClick(e, recipe)}
                           title="Editar receta"
                         >
@@ -306,7 +303,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                         <Button
                           variant="outline"
                           size="lg"
-                          className="px-4 py-5 text-red-600 border-red-300 hover:bg-red-50"
+                          className="px-4 py-5 text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900"
                           onClick={(e) => handleDeleteClick(e, recipe)}
                           title="Eliminar receta"
                         >

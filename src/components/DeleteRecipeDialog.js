@@ -27,11 +27,11 @@ export function DeleteRecipeDialog({ recipe, isOpen, onClose, onConfirm }) {
         </DialogHeader>
 
         <div className="py-4">
-          <p className="text-lg text-slate-600">
+          <p className="text-lg text-slate-600 dark:text-slate-300">
             ¿Estás seguro de que deseas eliminar{' '}
             <strong>"{recipe?.nombre || recipe?.nombre_receta}"</strong>?
           </p>
-          <p className="text-sm text-slate-500 mt-2">
+          <p className="text-sm text-slate-500 mt-2 dark:text-slate-400">
             Esta acción no se puede deshacer.
           </p>
         </div>
