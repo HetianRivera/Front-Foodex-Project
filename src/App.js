@@ -72,47 +72,58 @@ export default function App() {
   }, []);
 
   // ← AGREGAR: Cargar recetas del API cuando el usuario está autenticado
-  useEffect(() => {
-    if (!user) return;
-
-    const loadRecipesFromAPI = async () => {
-      setLoadingRecipes(true);
-      try {
-        // Intentar obtener id de usuario del objeto `user` o de localStorage
-        let uid = user?.user?.id_usuario ?? user?.user?.id ?? null;
-        if (!uid) {
-          try {
-            const raw = localStorage.getItem('foodex_user');
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              uid = parsed?.id_usuario ?? parsed?.id ?? uid;
-            }
-          } catch {}
-        }
-
-        let recipesList = [];
-        if (uid) {
-          recipesList = await listUserRecipes(uid);
-        } else {
-          const data = await listRecipes();
-          recipesList = Array.isArray(data) ? data : (data?.results || []);
-        }
-
-        // Guardar todas las recetas recibidas (sin recorte)
-        setRecipes(recipesList || []);
-      } catch (err) {
-        console.error('Error cargando recetas:', err);
-        toast.error('Error al cargar las recetas');
-      } finally {
-        setLoadingRecipes(false);
+  // Cargar recetas del API cuando el usuario está autenticado.
+  // Extraemos la función para poder llamarla tanto desde el efecto
+  // como inmediatamente después del login.
+  const loadRecipesFromAPI = async (u) => {
+    setLoadingRecipes(true);
+    try {
+      // Intentar obtener id de usuario del objeto `user` o de localStorage
+      let uid = u?.user?.id_usuario ?? u?.user?.id ?? null;
+      if (!uid) {
+        try {
+          const raw = localStorage.getItem('foodex_user');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            uid = parsed?.id_usuario ?? parsed?.id ?? uid;
+          }
+        } catch {}
       }
-    };
 
-    loadRecipesFromAPI();
+      let recipesList = [];
+      if (uid) {
+        recipesList = await listUserRecipes(uid);
+      } else {
+        const data = await listRecipes();
+        recipesList = Array.isArray(data) ? data : (data?.results || []);
+      }
+
+      // Guardar todas las recetas recibidas (sin recorte)
+      setRecipes(recipesList || []);
+    } catch (err) {
+      console.error('Error cargando recetas:', err);
+      toast.error('Error al cargar las recetas');
+    } finally {
+      setLoadingRecipes(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) {
+      setRecipes([]);
+      return;
+    }
+    loadRecipesFromAPI(user);
   }, [user]);
 
   const handleLogin = (userData) => {
     setUser(userData);
+    // Recargar recetas inmediatamente con la información del login
+    try {
+      loadRecipesFromAPI(userData);
+    } catch (e) {
+      // ignore - la carga también ocurrirá por el efecto
+    }
   };
 
   const handleLogout = () => {

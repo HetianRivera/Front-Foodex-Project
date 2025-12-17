@@ -22,103 +22,180 @@ function getIntEnvOr(name, fallback) {
   return val;
 }
 
-// Utilidad de fecha eliminada por no uso para evitar lint no-unused-vars
-
 function getAnioYear() {
   const raw = process.env.REACT_APP_ANIO;
   if (raw !== undefined && raw !== null) {
     const s = String(raw).trim();
-    // Si es YYYY-MM-DD, extraer solo el año
     const match = s.match(/^(\d{4})/);
     if (match) {
       const n = Number(match[1]);
       if (Number.isFinite(n) && n > 0) return n;
     }
-    // Si es solo un número, usarlo directamente
     const n = Number(s);
     if (Number.isFinite(n) && n > 0) return n;
   }
-  try {
-    const y = new Date().getFullYear();
-    if (y && y > 0) return y;
-  } catch {}
+  try { const y = new Date().getFullYear(); if (y && y > 0) return y; } catch {}
   return 2025;
 }
 
-function getAnioDateString() {
-  return String(getAnioYear());
+const RECETA_COMPLETA_BASE = (process.env.REACT_APP_RECETA_COMPLETA_ENDPOINT || '/api/v1/recetas/completas/').replace(/\/+$/, '/') ;
+
+async function tryRequestSingle(method, path = '', dataOrConfig) {
+  const url = RECETA_COMPLETA_BASE + path;
+  if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+    console.log(`[API-RECETA] ${method.toUpperCase()} ${url}`, method === 'get' ? { params: dataOrConfig } : dataOrConfig);
+  }
+  const resp = await api.request({ method, url, ...(method === 'get' ? { params: dataOrConfig } : { data: dataOrConfig }) });
+  return resp.data;
 }
 
-// Normalizar cantidades de ingredientes a una sola unidad (gramos para sólidos, mililitros/gramos para líquidos)
+// Construye el objeto RecetaCompleta esperado por el endpoint robusto.
+export function toBackendRecetaCompletaPayload(recipe) {
+  const userId = getUserId();
+  if (!userId) throw new Error('No se pudo determinar id_usuario (no hay sesión)');
+
+  let lsSemestre = null, lsTaller = null;
+  try { const v = localStorage.getItem('foodex_id_semestre'); if (v) lsSemestre = Number(v); } catch {}
+  try { const v = localStorage.getItem('foodex_id_taller'); if (v) lsTaller = Number(v); } catch {}
+
+  const receta = {
+    nombre_receta: (recipe?.nombre || recipe?.title || '').toString().trim() || 'Sin nombre',
+    codigo_receta: (recipe?.codigo || recipe?.code) ? String(recipe.codigo || recipe.code).trim() : null,
+    anio: recipe?.anio ? Number(recipe.anio) : getAnioYear(),
+    detalle_montaje: recipe?.montaje || recipe?.detalle_montaje || null,
+    estado: recipe?.estado !== undefined ? !!recipe.estado : true,
+    id_usuario: userId,
+    id_semestre: lsSemestre ?? getIntEnvOr('REACT_APP_SEMESTRE_ID', 1),
+  };
+  const includeTaller = String(process.env.REACT_APP_INCLUDE_TALLER_IN_RECETA || 'false').toLowerCase() === 'true';
+  if (includeTaller && lsTaller != null && Number.isFinite(lsTaller)) receta.id_taller = lsTaller;
+
+  // Construir lista de ingredientes planos a partir de la estructura por categorías
+  const ingredientes = [];
+  const defaultUnidad = Number(localStorage.getItem('foodex_id_unidad_default')) || getIntEnvOr('REACT_APP_DEFAULT_UNIDAD_ID', 1);
+  const defaultCategoriaId = getIntEnvOr('REACT_APP_DEFAULT_CATEGORY_ID', 1);
+  if (Array.isArray(recipe?.ingredientes)) {
+    for (const cat of recipe.ingredientes) {
+      const catIdFromCat = cat?.id_categoria ?? cat?.id ?? null;
+      for (const ing of (cat?.ingredientes || [])) {
+        const nombre = String(ing?.nombre || ing?.name || '').trim();
+        if (!nombre) continue; // evitar enviar ingredientes sin nombre
+        const id_unidad = ing?.id_unidad ?? ing?.unidad_id ?? defaultUnidad;
+        const id_categoria = ing?.id_categoria ?? ing?.categoria_id ?? catIdFromCat ?? defaultCategoriaId;
+        ingredientes.push({ nombre, id_unidad: Number(id_unidad) || defaultUnidad, id_categoria: Number(id_categoria) || defaultCategoriaId });
+      }
+    }
+  }
+
+  const categorias_ingrediente = Array.isArray(recipe?.categoria_ingrediente)
+    ? recipe.categoria_ingrediente.map(ci => ({ id_ingrediente: ci.id_ingrediente ?? null, id_categoria: ci.id_categoria ?? null }))
+    : [];
+
+  const receta_ingredientes = Array.isArray(recipe?.receta_ingredientes)
+    ? recipe.receta_ingredientes.map(ri => ({ id_receta: ri.id_receta ?? null, id_ingrediente: ri.id_ingrediente ?? null, id_receta_ingrediente: ri.id_receta_ingrediente ?? null }))
+    : [];
+
+  const mapEtapa = (e, idx) => ({
+    id_etapa: e?.id_etapa ?? genRecetaEtapaId(0, idx + 1),
+    nombre_etapa: (e?.nombre_etapa || e?.nombre || e?.title || '').toString().trim(),
+    tiempo_minutos: e?.tiempo_minutos ?? e?.tiempo ?? null
+  });
+  const etapas = Array.isArray(recipe?.etapas) ? recipe.etapas.map(mapEtapa) : [];
+
+  const receta_etapas = Array.isArray(recipe?.receta_etapas)
+    ? recipe.receta_etapas.map((re, idx) => ({
+        fase_etapa: re.fase_etapa ?? null,
+        instruccion_etapa: re.instruccion_etapa ?? null,
+        id_receta: re.id_receta ?? null,
+        id_etapa: re.id_etapa ?? (etapas[idx]?.id_etapa ?? null),
+        id_receta_etapa: re.id_receta_etapa ?? genRecetaEtapaId(0, idx + 1)
+      }))
+    : [];
+
+  const etapa_ingredientes = Array.isArray(recipe?.etapa_ingredientes)
+    ? recipe.etapa_ingredientes.map(ei => ({ cantidad_ingrediente: ei.cantidad_ingrediente ?? null, tiempo_coccion_minutos: ei.tiempo_coccion_minutos ?? null, id_etapa: ei.id_etapa ?? null, id_ingrediente: ei.id_ingrediente ?? null, id_etapa_ingrediente: ei.id_etapa_ingrediente ?? null, id: ei.id ?? null }))
+    : [];
+
+  // Si no vienen `receta_etapas` pero sí `etapas`, generar enlaces para las fases A..E solamente
+  if (receta_etapas.length === 0 && etapas.length > 0) {
+    const allowed = ['A','B','C','D','E'];
+    const take = etapas.slice(0, allowed.length);
+    receta_etapas.push(...take.map((et, idx) => ({
+      fase_etapa: allowed[idx],
+      instruccion_etapa: et.instruccion_etapa ?? et.descripcion ?? null,
+      id_receta: null,
+      id_etapa: et.id_etapa ?? null,
+      id_receta_etapa: genRecetaEtapaId(0, idx + 1),
+    })));
+  }
+
+  const tecnicas = Array.isArray(recipe?.tecnicas) ? recipe.tecnicas.map(t => ({ nombre_tecnica: t.nombre_tecnica || t.nombre || t.name || '', descripcion: t.descripcion || null })) : [];
+
+  const ingrediente_tecnica = Array.isArray(recipe?.ingrediente_tecnica)
+    ? recipe.ingrediente_tecnica.map(it => ({ id_ingrediente: it.id_ingrediente ?? null, id_tecnica: it.id_tecnica ?? null, id_ingrediente_tecnica: it.id_ingrediente_tecnica ?? null }))
+    : [];
+
+  return {
+    receta,
+    ingredientes,
+    categoria_ingrediente: categorias_ingrediente,
+    receta_ingredientes,
+    etapas,
+    receta_etapas,
+    etapa_ingredientes,
+    tecnicas,
+    ingrediente_tecnica,
+  };
+}
+
+export async function createRecipe(recipe) {
+  const payload = toBackendRecetaCompletaPayload(recipe);
+  return tryRequestSingle('post', '', payload);
+}
+
+export async function getRecipe(id) {
+  const idSeg = `${encodeURIComponent(id)}/`;
+  return tryRequestSingle('get', idSeg, {});
+}
+
+export async function listRecipes(params = {}) {
+  const data = await tryRequestSingle('get', '', params);
+  return Array.isArray(data) ? data : (data?.results || []);
+}
+
+export async function updateRecipe(id, patch) {
+  const idSeg = `${encodeURIComponent(id)}/`;
+  return tryRequestSingle('put', idSeg, patch);
+}
+
+export async function deleteRecipe(id) {
+  const idSeg = `${encodeURIComponent(id)}/`;
+  return tryRequestSingle('delete', idSeg, {});
+}
+
+// --- Helpers re-introducidos que usan createFullRecipe ---
+
+// Normalizar cantidades de ingredientes a una sola unidad (gramos para sólidos, mililitros para líquidos)
 function normalizeIngredientsInRecipe(recipe) {
   if (!recipe || !Array.isArray(recipe.ingredientes)) return recipe;
-  // Deep copy shallow structure we need
   const copy = { ...recipe, ingredientes: recipe.ingredientes.map(cat => ({
     categoria: cat.categoria,
     ingredientes: Array.isArray(cat.ingredientes) ? cat.ingredientes.map(ing => {
-      const nombre = ing.nombre;
+      const nombre = ing.nombre || ing.name || '';
       let cantidad = Number(ing.cantidad) || 0;
       const unidad = (ing.unidad || '').toString().toLowerCase();
-      // Normalización básica: kg -> g, lt/l -> ml (store as "cantidad" in base units)
       if (unidad === 'kg') cantidad = cantidad * 1000;
       if (unidad === 'lt' || unidad === 'l') cantidad = cantidad * 1000;
-      if (unidad === 'g' || unidad === 'gr' || unidad === 'ml') {/* already in base units */}
-      // 'u' (unidad) remains a count — keep as-is
-      // Return object without 'unidad' to align with backend that ignores units
       return { nombre, cantidad: Number(cantidad) };
     }) : []
   })) };
   return copy;
 }
 
-// Map UI recipe object -> backend schema for POST /api/v1/recetas/
-function toBackendRecipePayload(recipe) {
-  const userId = getUserId();
-  if (!userId) throw new Error('No se pudo determinar id_usuario (no hay sesión)');
-  // Preferir IDs creados en login si existen
-  let lsSemestre = null, lsTaller = null;
-  try { const v = localStorage.getItem('foodex_id_semestre'); if (v) lsSemestre = Number(v); } catch {}
-  try { const v = localStorage.getItem('foodex_id_taller'); if (v) lsTaller = Number(v); } catch {}
-  const base = {
-    nombre_receta: (recipe?.nombre || '').toString().trim() || 'Sin nombre',
-    codigo_receta: (recipe?.codigo || '').toString().trim() || null,
-    anio: parseInt(getAnioDateString(), 10),
-    detalle_montaje: recipe?.montaje || null,
-    estado: true,
-    id_usuario: userId,
-  };
-  // Incluir id_semestre obligatoriamente (preferir localStorage, luego env, luego 1)
-  const semestreId = lsSemestre ?? getIntEnvOr('REACT_APP_SEMESTRE_ID', 1);
-  base.id_semestre = semestreId;
-  // Taller opcional: solo incluir si está habilitado por entorno y disponible
-  // Nota: Django nombra columnas FK como <campo>_id (ej: id_taller -> id_taller_id)
-  // Si la columna no existe en la BD, el backend responderá 500 y reintentaremos sin taller en createRecipe
-  const includeTaller = String(process.env.REACT_APP_INCLUDE_TALLER_IN_RECETA || 'false').toLowerCase() === 'true';
-  if (includeTaller && lsTaller != null && Number.isFinite(lsTaller)) {
-    base.id_taller = lsTaller;
-  }
-  return base;
-}
-
-// Flexible endpoints for recipe management (SPA -> Django/DRF or Node)
-// Configure with env vars or fallback to common paths.
-// Env:
-// - REACT_APP_RECIPES_ENDPOINT  e.g. /api/v1/recetas/
-// Simplificado: una sola base. Si no se define por entorno, usar '/api/v1/recetas/'.
-const CANDIDATE_BASES = [
-  (process.env.REACT_APP_RECIPES_ENDPOINT || '/api/v1/recetas/'),
-].map(b => b.replace(/\/+$/, '/') );
-
-let resolvedBase = null;
-// --- Prefetch helpers for unidades y categorias ---
-let categoriaMapCache = null; // nombre_categoria (lower) -> id_categoria
-
+let categoriaMapCache = null;
 async function prefetchCategorias() {
   if (categoriaMapCache) return categoriaMapCache;
-  const candidates = [
-    // Confirmado por el backend: /api/v1/categorias/
-    '/api/v1/categorias/'
-  ];
+  const candidates = ['/api/v1/categorias/'];
   for (const url of candidates) {
     try {
       const r = await api.get(url);
@@ -130,7 +207,9 @@ async function prefetchCategorias() {
         if (name && id != null) categoriaMapCache[name] = id;
       }
       return categoriaMapCache;
-    } catch {}
+    } catch (e) {
+      /* ignore and try next */
+    }
   }
   categoriaMapCache = {};
   return categoriaMapCache;
@@ -140,12 +219,9 @@ async function ensureCategoria(nombre) {
   const map = await prefetchCategorias();
   const key = String(nombre || '').toLowerCase();
   if (map[key] != null) return map[key];
-  // No crear: la categoría debe existir en la API.
   throw new Error(`Categoría no encontrada: ${nombre}`);
 }
 
-// Genera un entero positivo para `id_receta_ingrediente` si el backend lo exige y
-// el UI no lo entrega. Minimiza colisiones usando receta+ingrediente+timestamp.
 function genRecetaIngredienteId(recetaId, ingredienteId, seq = 0) {
   const r = Number(recetaId) || 0;
   const i = Number(ingredienteId) || 0;
@@ -154,7 +230,6 @@ function genRecetaIngredienteId(recetaId, ingredienteId, seq = 0) {
   return Math.abs(n);
 }
 
-// Generadores para otras tablas intermedias con PK entera no nula
 function genRecetaEtapaId(recetaId, etapaId, seq = 0) {
   const r = Number(recetaId) || 0;
   const e = Number(etapaId) || 0;
@@ -179,224 +254,7 @@ function genIngredienteTecnicaId(ingredienteId, tecnicaId, seq = 0) {
   return Math.abs(n);
 }
 
-async function tryRequestOverCandidates(method, makePath, dataOrConfig) {
-  let lastErr;
-  const bases = resolvedBase ? [resolvedBase] : CANDIDATE_BASES;
-  for (const base of bases) {
-    try {
-      const path = base.replace(/\/+$/, '/') + makePath(base);
-      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-        console.log(`[API] ${method.toUpperCase()} ${path}`, method === 'get' ? { params: dataOrConfig } : dataOrConfig);
-      }
-      const resp = await api.request({ method, url: path, ...(method === 'get' ? { params: dataOrConfig } : { data: dataOrConfig }) });
-      resolvedBase = base; // cache success
-      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-        console.log(`[API] OK ${method.toUpperCase()} ${path}`, resp && resp.status);
-      }
-      return resp.data;
-    } catch (err) {
-      lastErr = err;
-      const status = err?.response?.status;
-      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-        console.warn(`[API] ERR ${method.toUpperCase()} ${base} ->`, status, err?.response?.data);
-      }
-      // Si el endpoint existe pero el payload es inválido o hay auth (400/401/403),
-      // no probar otros bases: la ruta correcta es esta. Cachear y salir.
-      if (status && status !== 404 && status !== 405) {
-        if (!resolvedBase) resolvedBase = base;
-        throw err;
-      }
-    }
-  }
-  throw lastErr || new Error('No recipe endpoint matched');
-}
 
-export async function createRecipe(recipe) {
-  const payload = toBackendRecipePayload(recipe);
-  try {
-    return await tryRequestOverCandidates('post', () => '', payload);
-  } catch (err) {
-    const status = err?.response?.status;
-    const data = err?.response?.data;
-    const hasTaller = Object.prototype.hasOwnProperty.call(payload, 'id_taller');
-    // Fallback: si el backend explota (500) y estamos enviando id_taller, reintentar sin id_taller
-    if (hasTaller && status && status >= 500) {
-      const payloadNoTaller = { ...payload };
-      delete payloadNoTaller.id_taller;
-      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-        console.warn('[API] Reintentando crear receta sin id_taller por error servidor', status, data);
-      }
-      return await tryRequestOverCandidates('post', () => '', payloadNoTaller);
-    }
-    throw err;
-  }
-}
-
-export async function getRecipe(id) {
-  const idSeg = `${encodeURIComponent(id)}/`;
-  return tryRequestOverCandidates('get', () => idSeg, {});
-}
-
-export async function listRecipes(params = {}) {
-  return tryRequestOverCandidates('get', () => '', params);
-}
-
-// Obtener recetas asociadas a un usuario. Algunos backends exponen
-// las recetas del usuario en la ruta /api/v1/recetas/<id>/ (id = id_usuario).
-// Esta función intenta esa variante y devuelve siempre un array.
-export async function listUserRecipes(userId) {
-  if (!userId) throw new Error('userId requerido para listar recetas por usuario');
-
-  // 1) Intentar la ruta directa /recetas/<userId>/ (algunos backends usan este patrón)
-  const idSeg = `${encodeURIComponent(userId)}/`;
-  try {
-    const data = await tryRequestOverCandidates('get', () => idSeg, {});
-    return Array.isArray(data) ? data : (data?.results || []);
-  } catch (err) {
-    const st = err?.response?.status;
-    // Si el error no es 404/405, es probablemente un problema real (auth, 500), propagar
-    if (st && st !== 404 && st !== 405) throw err;
-  }
-
-  // 2) Fallback: pedir al endpoint de listado con distintos parámetros de filtro comunes
-  const tryParams = [
-    { id_usuario: userId },
-    { usuario: userId },
-    { user: userId },
-    { owner: userId },
-  ];
-
-  for (const params of tryParams) {
-    try {
-      const data = await tryRequestOverCandidates('get', () => '', params);
-      const list = Array.isArray(data) ? data : (data?.results || []);
-      if (list && list.length >= 0) return list;
-    } catch (err) {
-      const st = err?.response?.status;
-      if (st && st !== 404 && st !== 405) throw err;
-      // otherwise probar siguiente variante
-    }
-  }
-
-  // 3) Último recurso: llamar al listado sin filtros (devuelve todas) y filtrar localmente
-  try {
-    const data = await tryRequestOverCandidates('get', () => '', {});
-    const list = Array.isArray(data) ? data : (data?.results || []);
-    // Filtrar por campos comunes que pueden contener el id de usuario
-    const uid = String(userId);
-    return (list || []).filter(r => (
-      String(r.id_usuario) === uid || (r.id_usuario === undefined && (String(r.usuario) === uid || String(r.user) === uid || String(r.id) === uid))
-    ));
-  } catch (err) {
-    throw err;
-  }
-}
-
-export async function updateRecipe(id, patch) {
-  const idSeg = `${encodeURIComponent(id)}/`;
-  // Si el patch incluye ingredientes en la forma de UI, normalizarlos antes de enviar
-  try {
-    if (patch && Array.isArray(patch.ingredientes)) {
-      patch = normalizeIngredientsInRecipe(patch);
-    }
-  } catch {}
-  return tryRequestOverCandidates('put', () => idSeg, patch);
-}
-
-export async function deleteRecipe(id) {
-  const idSeg = `${encodeURIComponent(id)}/`;
-  return tryRequestOverCandidates('delete', () => idSeg, {});
-}
-
-// Delete recipe and its related linking records (attempts safe deletions)
-export async function deleteFullRecipe(recetaId) {
-  if (!recetaId) throw new Error('recetaId requerido');
-  // Helper to delete detail by id over candidate endpoints
-  const deleteDetailOverCandidates = async (urls, id) => {
-    if (!urls || !id) return;
-    let lastErr = null;
-    for (const u of urls) {
-      try {
-        const url = u.replace(/\/+$|$/, '/') + encodeURIComponent(id) + '/';
-        await api.delete(url);
-        return;
-      } catch (e) {
-        lastErr = e;
-        const st = e?.response?.status;
-        if (st && st !== 404 && st !== 405) throw e;
-      }
-    }
-    if (lastErr) throw lastErr;
-  };
-
-  // 1) eliminar enlaces receta-ingredientes (solo los que pertenezcan a esta receta)
-  try {
-    const data = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, recetaId).catch(() => []);
-    let arr = Array.isArray(data) ? data : (data?.results || []);
-    // Filtrar solo enlaces que referencien la receta
-    arr = filterListByKeys(arr, ['id_receta','receta','receta_id','id_receta_id','id_receta_ingrediente','recetaIngrediente','id_receta_ingrediente'], recetaId);
-    for (const item of arr) {
-      const id = item.id_receta_ingrediente ?? item.id ?? item.id_receta_ingrediente_id ?? null;
-      // Nunca intentar borrar usando el recetaId en lugar del id de la relación
-      if (!id) continue;
-      if (String(id) === String(recetaId)) continue;
-      await deleteDetailOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, id).catch(() => {});
-    }
-  } catch (e) {}
-
-  // 2) eliminar enlaces receta-etapas y sus etapa-ingredientes
-  try {
-    const reData = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaEtapas, recetaId).catch(() => []);
-    let reArr = Array.isArray(reData) ? reData : (reData?.results || []);
-    // Filtrar solo relaciones que pertenezcan a esta receta
-    reArr = filterListByKeys(reArr, ['id_receta','receta','receta_id','id_receta_etapa','id_receta'], recetaId);
-    for (const rel of reArr) {
-      const idRel = rel.id_receta_etapa ?? rel.id ?? null;
-      const etapaId = rel.id_etapa ?? rel.id_etapa_id ?? rel.id_etapa ?? null;
-      if (etapaId) {
-        // eliminar etapa-ingredientes ligados a esta etapa (asegurando pertenencia a la etapa)
-        try {
-          const ei = await tryGetOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, etapaId).catch(() => []);
-          let eiArr = Array.isArray(ei) ? ei : (ei?.results || []);
-          eiArr = filterListByKeys(eiArr, ['id_etapa','etapa','id_etapa_id','id_etapa_ingrediente'], etapaId);
-          for (const item of eiArr) {
-            const idEi = item.id_etapa_ingrediente ?? item.id ?? null;
-            if (!idEi) continue;
-            if (String(idEi) === String(recetaId)) continue;
-            await deleteDetailOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, idEi).catch(() => {});
-          }
-        } catch (e) {}
-      }
-      if (idRel && String(idRel) !== String(recetaId)) await deleteDetailOverCandidates(RELATED_ENDPOINTS.recetaEtapas, idRel).catch(() => {});
-    }
-  } catch (e) {}
-
-  // 3) eliminar enlaces ingrediente-tecnica para ingredientes de la receta
-  try {
-    const recetaIngs = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, recetaId).catch(() => []);
-    let arr = Array.isArray(recetaIngs) ? recetaIngs : (recetaIngs?.results || []);
-    // Filtrar solo enlaces que refieran a esta receta
-    arr = filterListByKeys(arr, ['id_receta','receta','receta_id','id_receta_ingrediente','recetaIngrediente','id_receta'], recetaId);
-    const ingredientIds = arr.map(i => i.id_ingrediente ?? i.ingrediente ?? i.id).filter(Boolean);
-    for (const ingId of ingredientIds) {
-      try {
-        const links = await tryGetOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, ingId).catch(() => []);
-        let linkArr = Array.isArray(links) ? links : (links?.results || []);
-        // Filtrar solo los links que ligan a este ingrediente (y por tanto a esta receta)
-        linkArr = filterListByKeys(linkArr, ['id_ingrediente','ingrediente','id','id_ingrediente_tecnica'], ingId);
-        for (const l of linkArr) {
-          const idLink = l.id_ingrediente_tecnica ?? l.id ?? null;
-          if (!idLink) continue;
-          if (String(idLink) === String(recetaId)) continue;
-          await deleteDetailOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, idLink).catch(() => {});
-        }
-      } catch (e) {}
-    }
-  } catch (e) {}
-
-  // 4) finalmente eliminar la receta
-  return deleteRecipe(recetaId);
-}
 
 // --- Extended creation to persist related entities aligned with API ---
 
@@ -622,270 +480,12 @@ async function postOverCandidates(urls, data) {
 }
 
 export async function createFullRecipe(uiRecipe) {
-  // Normalizar ingredientes (convertir unidades a base y eliminar 'unidad')
+  // Normalizar ingredientes y construir payload completo
   try { uiRecipe = normalizeIngredientsInRecipe(uiRecipe); } catch {}
-  // 0) Crear receta primero para obtener id_receta
-  let base = null;
-  let recetaId = null;
-  try {
-    base = await createRecipe(uiRecipe);
-    recetaId = base?.id_receta ?? base?.id ?? null;
-    } catch (err) {
-    const allowDefer = String(process.env.REACT_APP_DEFER_RECIPE_ON_ERROR || 'false').toLowerCase() === 'true';
-    const status = err?.response?.status;
-    if (allowDefer && status && status >= 500) {
-      // No usar ID temporal: continuar sin recetaId para configurar entidades independientes
-      recetaId = null;
-      base = { _deferred: true, nombre_receta: uiRecipe?.nombre || null };
-      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-        console.warn('[API] Modo diferido: no se creó receta, se continúan entidades independientes', status);
-      }
-    } else {
-      throw err;
-    }
-  }
-
-  // 1) Crear tablas independientes después: unidades/categorías (prefetch/ensure), ingredientes, etapas, técnicas
-  const createdIngredientes = {}; // nombre -> { id, clientRecetaIngId }
-  const createdEtapas = []; // { id_etapa, fase, orden, instruccion, ingredientesUsados }
-  // Unidades descartadas por backend actual
-  await prefetchCategorias();
-
-const buildIngredientPayloadVariants = (ing, id_categoria) => {
-  const id_unidad =
-    Number(
-      ing?.id_unidad ??
-      ing?.unidad?.id_unidad ??
-      localStorage.getItem('foodex_id_unidad_default') ??
-      1
-    );
-
-  const common = { nombre: ing.nombre, id_unidad };
-
-  return [
-    { ...common, id_categoria }
-  ];
-};
-
-
-
-  // Ingredientes
-  for (const cat of (uiRecipe.ingredientes || [])) {
-    for (const ing of (cat.ingredientes || [])) {
-      // Forzar uso de las 5 categorías válidas; si no viene, usar 'Abarrotes' como fallback estable
-      const allowedCats = ['cárnicos','verduras','ovolácteos','abarrotes','licores'];
-      const requestedCat = String(cat.categoria || '').toLowerCase();
-      const normalizedCat = allowedCats.includes(requestedCat) ? cat.categoria : 'Abarrotes';
-      const id_categoria = await ensureCategoria(normalizedCat);
-      try {
-        let savedIng = null;
-        for (const variant of buildIngredientPayloadVariants(ing, id_categoria)) {
-          try {
-            if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
-              console.log('[API] TRY ingrediente payload', variant);
-            }
-            savedIng = await postOverCandidates(RELATED_ENDPOINTS.ingredientes, variant);
-            if (savedIng) break;
-          } catch (e) {
-            const status = e?.response?.status;
-            if (status && (status === 404 || status === 405)) break;
-            // Superficies otras fallas para poder visualizarlas
-            throw e;
-          }
-        }
-        if (!savedIng) throw new Error('No se pudo crear ingrediente (variantes fallidas)');
-        const idIng = savedIng?.id_ingrediente ?? savedIng?.id ?? null;
-        if (idIng != null) {
-          const rawRelId = ing?.id_receta_ingrediente;
-          const relIdNum = Number(rawRelId);
-          const clientRelId = Number.isFinite(relIdNum) && relIdNum > 0 ? relIdNum : null;
-          createdIngredientes[ing.nombre] = { id: idIng, clientRecetaIngId: clientRelId };
-        }
-      } catch (err) {
-        // No ocultar errores de API
-        throw err;
-      }
-    }
-  }
-
-  // Etapas (guardar para enlazar luego con la receta)
-  const deriveFaseEtapa = (p) => {
-    const raw = (p?.etapa ?? '').toString().trim().toUpperCase();
-    return /^[A-E]$/.test(raw) ? raw : 'A';
-  };
-  const allowedPhases = ['A','B','C','D','E'];
-  const usedPhases = new Set();
-  for (let i = 0; i < (uiRecipe.procesos || []).length; i++) {
-    const p = uiRecipe.procesos[i];
-    const tituloTrim = (p.titulo || '').toString().trim();
-    const descripcionTrim = (p.descripcion || '').toString().trim();
-    const tiempoVal = Number(p.tiempoEstimado);
-    const hasAnyField = tituloTrim || descripcionTrim || Number.isFinite(tiempoVal);
-    // Si la etapa no tiene datos, NO crearla ni vincularla
-    if (!hasAnyField) continue;
-
-    const etapaPayload = {
-      nombre_etapa: tituloTrim || `Etapa ${p.etapa}`,
-      tiempo_minutos: Number.isFinite(tiempoVal) ? tiempoVal : null,
-    };
-    let etapaId = null;
-    try {
-      const savedEtapa = await postOverCandidates(RELATED_ENDPOINTS.etapas, etapaPayload);
-      etapaId = savedEtapa?.id_etapa ?? savedEtapa?.id ?? null;
-    } catch (err) {
-      throw err;
-    }
-    // Resolver fase única
-    let fase = deriveFaseEtapa(p);
-    if (usedPhases.has(fase)) fase = allowedPhases.find(ph => !usedPhases.has(ph)) || fase;
-    usedPhases.add(fase);
-    createdEtapas.push({
-      id_etapa: etapaId,
-      fase,
-      orden: i + 1,
-      instruccion: descripcionTrim || null,
-      ingredientesUsados: Array.isArray(p.ingredientesUsados) ? p.ingredientesUsados : [],
-      tiempoCoccionMin: Number.isFinite(tiempoVal) ? tiempoVal : null,
-    });
-  }
-
-  // Técnicas (opcionales, independientes) y captura de id_tecnica
-  const createdTecnicas = []; // { id_tecnica, nombre, descripcion }
-  for (const t of (uiRecipe.tecnicas || [])) {
-    try {
-      const savedTec = await postOverCandidates(RELATED_ENDPOINTS.tecnicas, {
-        nombre_tecnica: t.nombre,
-        descripcion: t.descripcion || null,
-      });
-      const idTec = savedTec?.id_tecnica ?? savedTec?.id ?? null;
-      if (idTec != null) createdTecnicas.push({ id_tecnica: idTec, nombre: t.nombre, descripcion: t.descripcion || null });
-    } catch (err) {
-      throw err;
-    }
-  }
-
-  // 2) Ya tenemos la receta creada al inicio
-
-  // Utilidades de cola de enlaces diferidos (no usadas en este entorno)
-
-  // 3) Enlazar receta con ingredientes
-  if (recetaId != null) {
-    let seq = 0;
-    for (const [, info] of Object.entries(createdIngredientes)) {
-      try {
-        const payloadRI = { id_receta: recetaId, id_ingrediente: info?.id };
-        // Si el backend requiere valor no nulo, asegurar uno.
-        const requireRelId = String(process.env.REACT_APP_REQUIRE_RECETA_ING_ID || 'true').toLowerCase() === 'true';
-        if (info?.clientRecetaIngId != null) {
-          payloadRI.id_receta_ingrediente = info.clientRecetaIngId;
-        } else if (requireRelId) {
-          payloadRI.id_receta_ingrediente = genRecetaIngredienteId(recetaId, info?.id, seq);
-        }
-        await postOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, payloadRI);
-        seq += 1;
-      } catch (err) {
-        throw err;
-      }
-    }
-  }
-
-  // 4) Enlazar receta con etapas y etapa con ingredientes
-  for (const et of createdEtapas) {
-    const etapaId = et.id_etapa;
-    if (recetaId != null && etapaId != null) {
-      try {
-        const payloadRE = {
-          fase_etapa: et.fase,
-          instruccion_etapa: et.instruccion,
-          id_receta: recetaId,
-          id_etapa: etapaId,
-        };
-        // PK requerida: id_receta_etapa
-        const requireRelId = String(process.env.REACT_APP_REQUIRE_RECETA_ETAPA_ID || 'true').toLowerCase() === 'true';
-        if (requireRelId) {
-          payloadRE.id_receta_etapa = genRecetaEtapaId(recetaId, etapaId, et.orden ?? 0);
-        }
-        const savedRE = await postOverCandidates(RELATED_ENDPOINTS.recetaEtapas, payloadRE);
-        const idRecetaEtapa = savedRE?.id_receta_etapa ?? savedRE?.id ?? null;
-        et.id_receta_etapa = idRecetaEtapa;
-      } catch (err) {
-        throw err;
-      }
-    }
-    for (const iu of et.ingredientesUsados) {
-      const idIng = createdIngredientes[iu?.nombre]?.id;
-      const cantidad = Number(iu.cantidad);
-      if (etapaId != null && idIng != null && Number.isFinite(cantidad)) {
-        try {
-          const payloadEI = {
-            cantidad_ingrediente: cantidad,
-            tiempo_coccion_minutos: Number.isFinite(et.tiempoCoccionMin) ? et.tiempoCoccionMin : null,
-            id_etapa: etapaId,
-            id_ingrediente: idIng,
-          };
-          // PK requerida siempre: id_etapa_ingrediente (evitar nulos)
-          const genIdEI = genEtapaIngredienteId(etapaId, idIng);
-          // Enviar ambos alias por compatibilidad con serializers: PK como 'id' y como 'id_etapa_ingrediente'
-          payloadEI.id_etapa_ingrediente = genIdEI;
-          payloadEI.id = genIdEI;
-          // Forzar ejecución inmediata aunque esté activo el modo diferido,
-          // ya que etapa-ingrediente no depende de receta.
-          const savedEI = await postOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, payloadEI);
-          const idEtapaIngrediente = savedEI?.id_etapa_ingrediente ?? savedEI?.id ?? null;
-          // Podríamos almacenar estos IDs por etapa si hace falta usarlos luego
-          iu.id_etapa_ingrediente = idEtapaIngrediente;
-        } catch (err) {
-          throw err;
-        }
-      }
-    }
-  }
-
-  // 5) (Opcional) Vincular técnicas con ingredientes
-  // Alcance configurable: 'used' (ingredientes usados en etapas) o 'all' (todos los ingredientes creados de la receta)
-  try {
-    if (createdTecnicas.length > 0) {
-      const scope = String(process.env.REACT_APP_TECHNIQUE_LINK_SCOPE || 'used').toLowerCase();
-      const usedNames = new Set();
-      for (const p of (uiRecipe.procesos || [])) {
-        for (const iu of (p.ingredientesUsados || [])) {
-          const nm = (iu?.nombre || '').toString().trim(); if (nm) usedNames.add(nm);
-        }
-      }
-      const allNames = Object.keys(createdIngredientes);
-      const targetNames = scope === 'all' ? allNames : allNames.filter(n => usedNames.has(n));
-      for (const tec of createdTecnicas) {
-        for (const nm of targetNames) {
-          const idIng = createdIngredientes[nm]?.id;
-          if (idIng != null) {
-            try {
-              const payloadIT = { id_ingrediente: idIng, id_tecnica: tec.id_tecnica };
-              // PK requerida: id_ingrediente_tecnica
-              const requireRelIdIT = String(process.env.REACT_APP_REQUIRE_ING_TEC_ID || 'true').toLowerCase() === 'true';
-              if (requireRelIdIT) {
-                payloadIT.id_ingrediente_tecnica = genIngredienteTecnicaId(idIng, tec.id_tecnica);
-              }
-              // Forzar ejecución inmediata aunque esté activo el modo diferido,
-              // ya que ingrediente-tecnica no depende de receta.
-              await linkIngredienteTecnica(payloadIT);
-            } catch (e) {
-              // Permitir continuar si el endpoint no existe en algún entorno
-              const st = e?.response?.status; if (!(st && (st === 404 || st === 405))) throw e;
-            }
-          }
-        }
-      }
-    }
-  } catch (err) {
-    // Si la receta se creó (recetaId !== null) pero falla en relaciones,
-    // adjuntar el base al error para que el cliente pueda usarlo
-    if (recetaId != null && base) {
-      err._recipeBase = base;
-    }
-    throw err;
-  }
-
-  return base;
+  const payload = toBackendRecetaCompletaPayload(uiRecipe);
+  // Enviar todo en un solo POST al endpoint robusto
+  const resp = await tryRequestSingle('post', '', payload);
+  return resp;
 }
 
 // --- Utilidades de enlace adicionales ---
@@ -923,4 +523,98 @@ export async function linkCategoriaIngrediente({ id_ingrediente, id_categoria })
     }
   }
   throw new Error('No se pudo vincular categoria_ingrediente');
+}
+
+export async function listUserRecipes(userId) {
+  try {
+    let uid = userId;
+    if (!uid) {
+      uid = getUserId();
+    }
+    if (!uid) throw new Error('userId requerido para listar recetas por usuario');
+    if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+      console.debug('[API] listUserRecipes: usando id_usuario=', uid);
+    }
+    const data = await listRecipes({ id_usuario: uid });
+    return Array.isArray(data) ? data : (data?.results || []);
+  } catch (e) {
+    // Si ocurre un error (p.e. no hay userId), intentar devolver todas las recetas como fallback
+    try {
+      const data = await listRecipes();
+      return Array.isArray(data) ? data : (data?.results || []);
+    } catch (err) {
+      throw e;
+    }
+  }
+}
+
+// Borra una receta y, de forma opcional, intenta eliminar relaciones ligadas.
+export async function deleteFullRecipe(recetaId) {
+  if (!recetaId) throw new Error('recetaId requerido');
+  const deleteDetailOverCandidates = async (urls, id) => {
+    if (!urls || !id) return;
+    for (const u of urls) {
+      try {
+        const url = u.replace(/\/+$/, '/') + encodeURIComponent(id) + '/';
+        await api.delete(url);
+        return;
+      } catch (e) {
+        const st = e?.response?.status;
+        if (st && st !== 404 && st !== 405) throw e;
+      }
+    }
+  };
+
+  try {
+    const data = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, recetaId).catch(() => []);
+    const arr = Array.isArray(data) ? data : (data?.results || []);
+    for (const item of arr) {
+      const id = item.id_receta_ingrediente ?? item.id ?? null;
+      if (!id) continue;
+      if (String(id) === String(recetaId)) continue;
+      await deleteDetailOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, id).catch(() => {});
+    }
+  } catch (e) {}
+
+  try {
+    const reData = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaEtapas, recetaId).catch(() => []);
+    const reArr = Array.isArray(reData) ? reData : (reData?.results || []);
+    for (const rel of reArr) {
+      const idRel = rel.id_receta_etapa ?? rel.id ?? null;
+      const etapaId = rel.id_etapa ?? rel.id_etapa_id ?? rel.id_etapa ?? null;
+      if (etapaId) {
+        try {
+          const ei = await tryGetOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, etapaId).catch(() => []);
+          const eiArr = Array.isArray(ei) ? ei : (ei?.results || []);
+          for (const item of eiArr) {
+            const idEi = item.id_etapa_ingrediente ?? item.id ?? null;
+            if (!idEi) continue;
+            if (String(idEi) === String(recetaId)) continue;
+            await deleteDetailOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, idEi).catch(() => {});
+          }
+        } catch (e) {}
+      }
+      if (idRel && String(idRel) !== String(recetaId)) await deleteDetailOverCandidates(RELATED_ENDPOINTS.recetaEtapas, idRel).catch(() => {});
+    }
+  } catch (e) {}
+
+  try {
+    const recetaIngs = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, recetaId).catch(() => []);
+    const arr = Array.isArray(recetaIngs) ? recetaIngs : (recetaIngs?.results || []);
+    const ingredientIds = arr.map(i => i.id_ingrediente ?? i.ingrediente ?? i.id).filter(Boolean);
+    for (const ingId of ingredientIds) {
+      try {
+        const links = await tryGetOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, ingId).catch(() => []);
+        const linkArr = Array.isArray(links) ? links : (links?.results || []);
+        for (const l of linkArr) {
+          const idLink = l.id_ingrediente_tecnica ?? l.id ?? null;
+          if (!idLink) continue;
+          if (String(idLink) === String(recetaId)) continue;
+          await deleteDetailOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, idLink).catch(() => {});
+        }
+      } catch (e) {}
+    }
+  } catch (e) {}
+
+  return deleteRecipe(recetaId);
 }
