@@ -62,7 +62,7 @@ function normalizeIngredientsInRecipe(recipe) {
       // Normalización básica: kg -> g, lt/l -> ml (store as "cantidad" in base units)
       if (unidad === 'kg') cantidad = cantidad * 1000;
       if (unidad === 'lt' || unidad === 'l') cantidad = cantidad * 1000;
-      if (unidad === 'g' || unidad === 'gr' || unidad === 'ml') cantidad = cantidad;
+      if (unidad === 'g' || unidad === 'gr' || unidad === 'ml') {/* already in base units */}
       // 'u' (unidad) remains a count — keep as-is
       // Return object without 'unidad' to align with backend that ignores units
       return { nombre, cantidad: Number(cantidad) };
@@ -111,12 +111,7 @@ const CANDIDATE_BASES = [
 
 let resolvedBase = null;
 // --- Prefetch helpers for unidades y categorias ---
-let unidadMapCache = null; // nombre_unidad (lower) -> id_unidad
 let categoriaMapCache = null; // nombre_categoria (lower) -> id_categoria
-
-// Unidades temporalmente descartadas del backend: omitir prefetch/creación
-async function prefetchUnidades() { return {}; }
-async function ensureUnidad(nombre) { return null; }
 
 async function prefetchCategorias() {
   if (categoriaMapCache) return categoriaMapCache;
@@ -288,7 +283,10 @@ export async function listUserRecipes(userId) {
     const data = await tryRequestOverCandidates('get', () => '', {});
     const list = Array.isArray(data) ? data : (data?.results || []);
     // Filtrar por campos comunes que pueden contener el id de usuario
-    return (list || []).filter(r => (r.id_usuario == userId) || (r.id_usuario == undefined && (r.usuario == userId || r.user == userId || r.id == userId)));
+    const uid = String(userId);
+    return (list || []).filter(r => (
+      String(r.id_usuario) === uid || (r.id_usuario === undefined && (String(r.usuario) === uid || String(r.user) === uid || String(r.id) === uid))
+    ));
   } catch (err) {
     throw err;
   }
@@ -308,6 +306,96 @@ export async function updateRecipe(id, patch) {
 export async function deleteRecipe(id) {
   const idSeg = `${encodeURIComponent(id)}/`;
   return tryRequestOverCandidates('delete', () => idSeg, {});
+}
+
+// Delete recipe and its related linking records (attempts safe deletions)
+export async function deleteFullRecipe(recetaId) {
+  if (!recetaId) throw new Error('recetaId requerido');
+  // Helper to delete detail by id over candidate endpoints
+  const deleteDetailOverCandidates = async (urls, id) => {
+    if (!urls || !id) return;
+    let lastErr = null;
+    for (const u of urls) {
+      try {
+        const url = u.replace(/\/+$|$/, '/') + encodeURIComponent(id) + '/';
+        await api.delete(url);
+        return;
+      } catch (e) {
+        lastErr = e;
+        const st = e?.response?.status;
+        if (st && st !== 404 && st !== 405) throw e;
+      }
+    }
+    if (lastErr) throw lastErr;
+  };
+
+  // 1) eliminar enlaces receta-ingredientes (solo los que pertenezcan a esta receta)
+  try {
+    const data = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, recetaId).catch(() => []);
+    let arr = Array.isArray(data) ? data : (data?.results || []);
+    // Filtrar solo enlaces que referencien la receta
+    arr = filterListByKeys(arr, ['id_receta','receta','receta_id','id_receta_id','id_receta_ingrediente','recetaIngrediente','id_receta_ingrediente'], recetaId);
+    for (const item of arr) {
+      const id = item.id_receta_ingrediente ?? item.id ?? item.id_receta_ingrediente_id ?? null;
+      // Nunca intentar borrar usando el recetaId en lugar del id de la relación
+      if (!id) continue;
+      if (String(id) === String(recetaId)) continue;
+      await deleteDetailOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, id).catch(() => {});
+    }
+  } catch (e) {}
+
+  // 2) eliminar enlaces receta-etapas y sus etapa-ingredientes
+  try {
+    const reData = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaEtapas, recetaId).catch(() => []);
+    let reArr = Array.isArray(reData) ? reData : (reData?.results || []);
+    // Filtrar solo relaciones que pertenezcan a esta receta
+    reArr = filterListByKeys(reArr, ['id_receta','receta','receta_id','id_receta_etapa','id_receta'], recetaId);
+    for (const rel of reArr) {
+      const idRel = rel.id_receta_etapa ?? rel.id ?? null;
+      const etapaId = rel.id_etapa ?? rel.id_etapa_id ?? rel.id_etapa ?? null;
+      if (etapaId) {
+        // eliminar etapa-ingredientes ligados a esta etapa (asegurando pertenencia a la etapa)
+        try {
+          const ei = await tryGetOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, etapaId).catch(() => []);
+          let eiArr = Array.isArray(ei) ? ei : (ei?.results || []);
+          eiArr = filterListByKeys(eiArr, ['id_etapa','etapa','id_etapa_id','id_etapa_ingrediente'], etapaId);
+          for (const item of eiArr) {
+            const idEi = item.id_etapa_ingrediente ?? item.id ?? null;
+            if (!idEi) continue;
+            if (String(idEi) === String(recetaId)) continue;
+            await deleteDetailOverCandidates(RELATED_ENDPOINTS.etapaIngredientes, idEi).catch(() => {});
+          }
+        } catch (e) {}
+      }
+      if (idRel && String(idRel) !== String(recetaId)) await deleteDetailOverCandidates(RELATED_ENDPOINTS.recetaEtapas, idRel).catch(() => {});
+    }
+  } catch (e) {}
+
+  // 3) eliminar enlaces ingrediente-tecnica para ingredientes de la receta
+  try {
+    const recetaIngs = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, recetaId).catch(() => []);
+    let arr = Array.isArray(recetaIngs) ? recetaIngs : (recetaIngs?.results || []);
+    // Filtrar solo enlaces que refieran a esta receta
+    arr = filterListByKeys(arr, ['id_receta','receta','receta_id','id_receta_ingrediente','recetaIngrediente','id_receta'], recetaId);
+    const ingredientIds = arr.map(i => i.id_ingrediente ?? i.ingrediente ?? i.id).filter(Boolean);
+    for (const ingId of ingredientIds) {
+      try {
+        const links = await tryGetOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, ingId).catch(() => []);
+        let linkArr = Array.isArray(links) ? links : (links?.results || []);
+        // Filtrar solo los links que ligan a este ingrediente (y por tanto a esta receta)
+        linkArr = filterListByKeys(linkArr, ['id_ingrediente','ingrediente','id','id_ingrediente_tecnica'], ingId);
+        for (const l of linkArr) {
+          const idLink = l.id_ingrediente_tecnica ?? l.id ?? null;
+          if (!idLink) continue;
+          if (String(idLink) === String(recetaId)) continue;
+          await deleteDetailOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, idLink).catch(() => {});
+        }
+      } catch (e) {}
+    }
+  } catch (e) {}
+
+  // 4) finalmente eliminar la receta
+  return deleteRecipe(recetaId);
 }
 
 // --- Extended creation to persist related entities aligned with API ---
@@ -383,7 +471,7 @@ function filterListByKeys(list, keys, value) {
         if (item == null) continue;
         const v = item[k];
         if (v == null) continue;
-        if (String(v) === String(value) || v == value) return true;
+        if (String(v) === String(value) || v === value) return true;
       } catch (e) {
         continue;
       }
@@ -539,16 +627,14 @@ export async function createFullRecipe(uiRecipe) {
   // 0) Crear receta primero para obtener id_receta
   let base = null;
   let recetaId = null;
-  let deferredMode = false;
   try {
     base = await createRecipe(uiRecipe);
     recetaId = base?.id_receta ?? base?.id ?? null;
-  } catch (err) {
+    } catch (err) {
     const allowDefer = String(process.env.REACT_APP_DEFER_RECIPE_ON_ERROR || 'false').toLowerCase() === 'true';
     const status = err?.response?.status;
     if (allowDefer && status && status >= 500) {
       // No usar ID temporal: continuar sin recetaId para configurar entidades independientes
-      deferredMode = true;
       recetaId = null;
       base = { _deferred: true, nombre_receta: uiRecipe?.nombre || null };
       if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
@@ -562,7 +648,6 @@ export async function createFullRecipe(uiRecipe) {
   // 1) Crear tablas independientes después: unidades/categorías (prefetch/ensure), ingredientes, etapas, técnicas
   const createdIngredientes = {}; // nombre -> { id, clientRecetaIngId }
   const createdEtapas = []; // { id_etapa, fase, orden, instruccion, ingredientesUsados }
-  const unidadAlias = { gr: 'gramos', kg: 'kilogramos', ml: 'mililitros', lt: 'litros', u: 'unidades' };
   // Unidades descartadas por backend actual
   await prefetchCategorias();
 
@@ -681,14 +766,12 @@ const buildIngredientPayloadVariants = (ing, id_categoria) => {
 
   // 2) Ya tenemos la receta creada al inicio
 
-  // Utilidades de cola de enlaces diferidos
-  // En este modo, no se encolan enlaces dependientes de receta (sin id_receta)
-  const pushPendingLink = () => {};
+  // Utilidades de cola de enlaces diferidos (no usadas en este entorno)
 
   // 3) Enlazar receta con ingredientes
   if (recetaId != null) {
     let seq = 0;
-    for (const [nombreIng, info] of Object.entries(createdIngredientes)) {
+    for (const [, info] of Object.entries(createdIngredientes)) {
       try {
         const payloadRI = { id_receta: recetaId, id_ingrediente: info?.id };
         // Si el backend requiere valor no nulo, asegurar uno.
