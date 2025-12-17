@@ -9,7 +9,8 @@ import {
   Clock, 
   AlertTriangle,
   Utensils,
-  Package
+  Package,
+  List
 } from 'lucide-react';
 import { DashboardHeader } from './DashboardHeader';
 import { DashboardFooter } from './DashboardFooter';
@@ -37,16 +38,38 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
       montaje: data.detalle_montaje ?? data.montaje ?? data.detalle_montaje ?? '',
       tareaInicio: data.tareaInicio ?? data.tarea_inicio ?? data.tareaInicio ?? '',
       argumentacionComercial: data.argumentacionComercial ?? data.argumentacion_comercial ?? data.argumentacionComercial ?? '',
-      procesos: Array.isArray(data.procesos) ? data.procesos : (Array.isArray(data.etapas) ? data.etapas.map(e => ({
-        etapa: e.fase_etapa ?? e.fase ?? e.etapa,
-        titulo: e.nombre_etapa ?? e.titulo ?? e.nombre ?? '',
-        descripcion: e.instruccion_etapa ?? e.descripcion ?? e.instruccion ?? '',
-        tiempoEstimado: e.tiempo_minutos ?? e.tiempoCoccionMin ?? e.tiempoEstimado ?? null,
-        ingredientesUsados: Array.isArray(e.ingredientesUsados) ? e.ingredientesUsados : (Array.isArray(e.ingredientes) ? e.ingredientes : []),
-      })) : []),
+      procesos: [],
       ingredientes: Array.isArray(data.ingredientes) ? data.ingredientes : (Array.isArray(data.receta_ingredientes) ? data.receta_ingredientes : []),
       tecnicas: Array.isArray(data.tecnicas) ? data.tecnicas : (Array.isArray(data.tecnica) ? data.tecnica : []),
     };
+
+    // Extract stages from multiple possible backend field names
+    try {
+      const stageCandidates = ['procesos','etapas','pasos','recetaEtapas','receta_etapas','receta_etapa','proceso','procesos_list','etapa_list'];
+      let rawStages = null;
+      for (const key of stageCandidates) {
+        if (Array.isArray(data[key])) { rawStages = data[key]; break; }
+        if (data[key] && typeof data[key] === 'object' && !Array.isArray(data[key])) {
+          // object-like map -> convert to array
+          rawStages = Object.keys(data[key]).map(k => data[key][k]);
+          break;
+        }
+      }
+      if (!rawStages && Array.isArray(data.procesos)) rawStages = data.procesos;
+      if (!rawStages && Array.isArray(data.etapas)) rawStages = data.etapas;
+      if (!rawStages && Array.isArray(data.pasos)) rawStages = data.pasos;
+      if (rawStages && Array.isArray(rawStages)) {
+        r.procesos = rawStages.map(e => ({
+          etapa: e?.fase_etapa ?? e?.fase ?? e?.etapa ?? e?.orden ?? null,
+          titulo: e?.nombre_etapa ?? e?.titulo ?? e?.nombre ?? e?.name ?? '',
+          descripcion: e?.instruccion_etapa ?? e?.instruccion ?? e?.descripcion ?? e?.detalle ?? '',
+          tiempoEstimado: e?.tiempo_minutos ?? e?.tiempoCoccionMin ?? e?.tiempoEstimado ?? e?.tiempo ?? null,
+          ingredientesUsados: Array.isArray(e?.ingredientesUsados) ? e.ingredientesUsados : (Array.isArray(e?.ingredientes) ? e.ingredientes : []),
+        }));
+      }
+    } catch (e) {
+      console.warn('[RecipeView] normalize stages parse error', e);
+    }
     // Calcular tiempo total como suma de tiempos de procesos si están disponibles
     try {
       const total = (r.procesos || []).reduce((s, p) => {
@@ -133,6 +156,20 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
     return `${q} ${unidad || ''}`;
   };
 
+  const formatDuration = (minutes) => {
+    const m = Number(minutes) || 0;
+    if (m <= 0) return '0 min';
+    if (m < 60) return `${m} min`;
+    const days = Math.floor(m / 1440);
+    const hours = Math.floor((m % 1440) / 60);
+    const mins = m % 60;
+    const parts = [];
+    if (days) parts.push(`${days} ${days === 1 ? 'día' : 'días'}`);
+    if (hours) parts.push(`${hours} ${hours === 1 ? 'h' : 'h'}`);
+    if (mins) parts.push(`${mins} min`);
+    return parts.join(' ');
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out">
       <DashboardHeader user={user} onLogout={onLogout}>
@@ -160,13 +197,20 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
       {/* Content - Optimizado para tablet */}
       <div className="container mx-auto max-w-6xl p-6">
         <Tabs defaultValue="proceso" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 h-auto gap-2 bg-slate-200 dark:bg-slate-800 p-2 transition-colors duration-500">
+          <TabsList className="grid w-full grid-cols-5 h-auto gap-2 bg-slate-200 dark:bg-slate-800 p-2 transition-colors duration-500">
             <TabsTrigger 
               value="proceso" 
               className="text-lg py-5 text-slate-900 dark:text-slate-100 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
             >
               <ChefHat className="w-6 h-6 mr-2" />
               Proceso
+            </TabsTrigger>
+            <TabsTrigger
+              value="etapa"
+              className="text-lg py-5 text-slate-900 dark:text-slate-100 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
+            >
+              <List className="w-6 h-6 mr-2" />
+              Etapas
             </TabsTrigger>
             <TabsTrigger 
               value="ingredientes" 
@@ -196,57 +240,23 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             {/* Info Card */}
             <Card className="bg-blue-50 border-blue-200 border-2 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
               <CardContent className="pt-8 pb-8">
-                <div className="grid grid-cols-3 gap-6 text-center">
+                <div className="grid grid-cols-2 gap-6 text-center">
                   <div>
                     <p className="text-base text-slate-600 dark:text-slate-300 mb-2">Tiempo Total</p>
                     <div className="flex items-center justify-center gap-2">
                       <Clock className="w-7 h-7 text-blue-600 dark:text-blue-400" />
-                      <p className="text-3xl">{recipe.tiempo} min</p>
+                      <p className="text-3xl">{formatDuration(recipe.tiempo)}</p>
                     </div>
-                  </div>
-                  <div>
-                    <p className="text-base text-slate-600 dark:text-slate-300 mb-2">Porciones</p>
-                    <p className="text-3xl">{recipe.porcion}</p>
                   </div>
                   <div>
                     <p className="text-base text-slate-600 dark:text-slate-300 mb-2">Etapas</p>
                     <p className="text-3xl">{Array.isArray(recipe.procesos) ? recipe.procesos.length : 0}</p>
-                    <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
-                      {(Array.isArray(recipe.procesos) ? recipe.procesos.slice(0,3) : []).map((p, i) => (
-                        <span key={i} className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-sm">{p.titulo || `Etapa ${p.etapa || i+1}`}</span>
-                      ))}
-                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Tarea de Inicio */}
-            {/* Etapas summary */}
-            <Card className="border-l-8 border-l-yellow-400 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
-              <CardHeader className="bg-yellow-50 dark:bg-yellow-950/20 pb-6 transition-colors duration-500">
-                <CardTitle className="text-2xl">📚 Etapas</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 pb-6">
-                {Array.isArray(recipe.procesos) && recipe.procesos.length > 0 ? (
-                  <div className="grid gap-3">
-                    {recipe.procesos.map((p, i) => (
-                      <div key={i} className="p-3 bg-white dark:bg-slate-950 rounded-lg border-2 border-yellow-200 dark:border-yellow-800/40">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-lg font-semibold">{p.titulo || `Etapa ${p.etapa || i+1}`}</div>
-                            <div className="text-sm text-slate-600 dark:text-slate-300">{p.descripcion || ''}</div>
-                          </div>
-                          <div className="text-sm text-slate-500">{p.tiempoEstimado ? `${p.tiempoEstimado} min` : ''}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-slate-600 dark:text-slate-300">No hay etapas registradas</div>
-                )}
-              </CardContent>
-            </Card>
 
             {/* Tarea de Inicio */}
             <Card className="border-l-8 border-l-green-500 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
@@ -258,59 +268,50 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
               </CardContent>
             </Card>
 
-            {/* Procesos - TEXTO OPTIMIZADO PARA TABLET */}
-            {(Array.isArray(recipe.procesos) ? recipe.procesos : []).map((proceso, idx) => (
-                <Card 
-                  key={idx} 
-                  className="border-l-8 border-l-primary shadow-lg dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500"
-                >
-                  <CardHeader className="bg-slate-100 dark:bg-slate-800 pb-6 transition-colors duration-500">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-3xl flex items:center gap-4">
-                        <Badge className="text-2xl px-5 py-2">
-                          ETAPA {proceso.etapa}
-                        </Badge>
-                        <span>{proceso.titulo}</span>
-                      </CardTitle>
-                      <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300 flex-shrink-0">
-                        <Clock className="w-7 h-7" />
-                        <span className="text-2xl">{proceso.tiempoEstimado} min</span>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-8 pb-8 space-y-6">
-                    {/* Descripción - TEXTO VISIBLE EN TABLET */}
-                    <div className="bg-white dark:bg-slate-950 p-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 transition-colors duration-500">
-                      <p className="text-xl leading-relaxed text-slate-900 dark:text-slate-100">
-                        {proceso.descripcion}
-                      </p>
-                    </div>
+            {/* procesos detallados removidos del tab 'proceso' - se mantienen en la pestaña 'Etapas' */}
+          </TabsContent>
 
-                    {/* Ingredientes Usados - FORMATO CLARO TABLET */}
-                    <div className="bg-amber-50 dark:bg-amber-950/20 p-6 rounded-xl border-2 border-amber-200 dark:border-amber-800/50 transition-colors duration-500">
-                      <h4 className="text-xl mb-4 flex items-center gap-3">
-                        <Package className="w-7 h-7 text-amber-700 dark:text-amber-300" />
-                        <span>Ingredientes para esta etapa:</span>
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        {(Array.isArray(proceso.ingredientesUsados) ? proceso.ingredientesUsados : []).map((ing, ingIdx) => (
-                          <div 
-                            key={ingIdx} 
-                            className="bg-white dark:bg-slate-950 p-5 rounded-lg border-2 border-amber-300 dark:border-amber-800/60 transition-colors duration-500"
-                          >
-                            <p className="text-lg leading-relaxed">
-                              <span className="block mb-1">{ing.nombre}</span>
-                              <span className="text-2xl text-primary block">
-                                {formatUnit(ing.cantidad ?? ing.cantidad_ingrediente ?? ing.amount, ing.unidad ?? ing.unidad_name ?? ing.unit)}
-                              </span>
-                            </p>
+          {/* Etapas Tab - muestra todas las etapas en tarjetas */}
+          <TabsContent value="etapa" className="space-y-6">
+            <Card className="border-l-8 border-l-yellow-400 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
+              <CardHeader className="bg-yellow-50 dark:bg-yellow-950/20 pb-6 transition-colors duration-500">
+                <CardTitle className="text-2xl">🗂️ Todas las Etapas</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 pb-6">
+                {Array.isArray(recipe.procesos) && recipe.procesos.length > 0 ? (
+                  <div className="grid md:grid-cols-3 sm:grid-cols-2 gap-4">
+                    {[...recipe.procesos]
+                      .slice()
+                      .sort((a, b) => {
+                        const na = Number(a?.etapa ?? a?.fase ?? a?.orden) || 0;
+                        const nb = Number(b?.etapa ?? b?.fase ?? b?.orden) || 0;
+                        return na - nb;
+                      })
+                      .map((p, i) => (
+                        <div key={i} className="p-4 bg-white dark:bg-slate-950 rounded-lg border-2 border-yellow-200 dark:border-yellow-800/40">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-lg font-semibold truncate">{p.titulo || `Etapa ${p.etapa || i+1}`}</div>
+                            <div className="text-sm text-slate-500">{p.tiempoEstimado ? `${p.tiempoEstimado} min` : ''}</div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                          <div className="text-sm text-slate-600 dark:text-slate-300 mb-3 truncate">{p.descripcion || ''}</div>
+                          {Array.isArray(p.ingredientesUsados) && p.ingredientesUsados.length > 0 && (
+                            <div className="mt-2">
+                              <div className="text-sm text-slate-500 mb-1">Ingredientes:</div>
+                              <ul className="list-disc list-inside text-sm">
+                                {p.ingredientesUsados.map((ing, idx) => (
+                                  <li key={idx} className="truncate">{ing.nombre || ing.nombre_ingrediente || ing.name} {ing.cantidad ? `— ${ing.cantidad}${ing.unidad ? ' ' + ing.unidad : ''}` : ''}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-slate-600 dark:text-slate-300">No hay etapas registradas</div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Ingredientes Tab (sin columnas de costos) */}
