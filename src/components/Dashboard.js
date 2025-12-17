@@ -8,7 +8,7 @@ import { DashboardFooter } from './DashboardFooter';
 import { EditRecipeModal } from './EditRecipeModal';
 import { DeleteRecipeDialog } from './DeleteRecipeDialog';
 import { toast } from 'sonner';
-import { updateRecipe, deleteRecipe } from '../api/recipes';
+import { updateRecipe, deleteFullRecipe } from '../api/recipes';
 
 export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewRecipe, onRecipeUpdated, onRecipeDeleted }) {
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -146,7 +146,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
         return;
       }
       
-      await deleteRecipe(recipeId);
+      await deleteFullRecipe(recipeId);
 
       // Actualizar la lista local
       const newRecipes = updatedRecipes.filter(r => 
