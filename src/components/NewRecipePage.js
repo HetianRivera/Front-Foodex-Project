@@ -231,7 +231,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       )
     );
 
-    toast.success('Ingrediente guardado');
+    // no mostrar notificación aquí; sólo mostrar al finalizar el guardado de la receta
   };
 
   const toggleEditIngrediente = (categoriaIndex, ingredientIndex) => {
@@ -381,7 +381,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
           : p
       )
     );
-    toast.success('Ingrediente de etapa guardado');
+    // no mostrar notificación aquí; sólo mostrar al finalizar el guardado de la receta
   };
 
   const toggleEditIngredienteEtapa = (etapaIndex, ingredienteIndex) => {
@@ -407,7 +407,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       return;
     }
     setProcesos(prev => prev.map((x, i) => (i === index ? { ...x, saved: true } : x)));
-    toast.success('Etapa guardada');
+    // no mostrar notificación aquí; sólo mostrar al finalizar el guardado de la receta
   };
 
   const toggleEditProceso = (index) => {
@@ -477,7 +477,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       return [...prev, newEntry];
     });
 
-    toast.success('Técnica guardada');
+    // no mostrar notificación aquí; sólo mostrar al finalizar el guardado de la receta
   };
 
   const handleSave = async () => {
@@ -566,11 +566,9 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       setIsSaving(true);
       const saved = await createFullRecipe(receta);
 
-      toast.success(
-        `Receta ${(saved?.nombre || saved?.nombre_receta || nombre || 'sin nombre')} guardada`
-      );
-
+      // Mostrar único mensaje de éxito al terminar el guardado
       onSave(saved);
+      toast.success('Se ha guardado correctamente');
     } catch (err) {
       const status = err?.response?.status;
       const body = err?.response?.data;
@@ -584,6 +582,8 @@ export function NewRecipePage({ onCancel, onSave, user }) {
 
       // fallback local
       onSave(receta);
+      // Mostrar mensaje de éxito también en el fallback local (cumple "solo ahí")
+      toast.success('Se ha guardado correctamente');
     } finally {
       setIsSaving(false);
     }
@@ -1222,7 +1222,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                       onChange={e => updateTecnica(idx, 'descripcion', e.target.value)}
                       className={inputClass}
                     />
-                    {t.saved && <p className="text-xs text-green-600 mt-1">Guardada</p>}
+                    {t.saved && <p className="text-xs text-green-600 mt-1">Registrada</p>}
                   </div>
                 </div>
               </div>

@@ -42,7 +42,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
     
     // Detectar si es un ID local (temporal, sin guardar a backend)
     if (isLocalRecipeId(recipeId)) {
-      toast.error('Esta receta aún no ha sido guardada al servidor. Guárdala primero desde Nueva Receta.');
+      toast.error('Esta receta aún no ha sido registrada en el servidor. Regístrala primero desde Nueva Receta.');
       return;
     }
     
@@ -141,7 +141,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
       
       // Detectar si es un ID local (temporal, sin guardar a backend)
       if (isLocalRecipeId(recipeId)) {
-        toast.error('Esta receta aún no ha sido guardada al servidor. No se puede eliminar.');
+        toast.error('Esta receta aún no ha sido registrada en el servidor. No se puede eliminar.');
         setDeletingRecipe(null);
         return;
       }
