@@ -703,11 +703,11 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Nueva Ficha Técnica</h1>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onCancel}>
+            <Button className={'bg-white text-black hover:bg-gray-200 hover:text-black'} variant="outline" onClick={onCancel}>
               Cancelar
             </Button>
-            <Button onClick={handleSave}>Guardar</Button>
-            <Button variant="secondary" onClick={exportWord}>
+            <Button className={'bg-white text-black hover:bg-gray-200 hover:text-black'} onClick={handleSave}>Guardar</Button>
+            <Button className={'bg-white text-black hover:bg-gray-200 hover:text-black'} variant="secondary" onClick={exportWord}>
               Exportar Word
             </Button>
           </div>
@@ -860,7 +860,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               <div key={ci} className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xl font-semibold">{cat.categoria}</h4>
-                  <Button size="sm" variant="secondary" onClick={() => addIngredient(ci)}>
+                  <Button className={'dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:hover:text-black'} size="sm" variant="secondary" onClick={() => addIngredient(ci)}>
                     Agregar
                   </Button>
                 </div>
@@ -964,6 +964,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                       size="sm"
                       variant="secondary"
                       onClick={() => (p.saved ? toggleEditProceso(pi) : saveProceso(pi))}
+                      className={'hover:bg-white dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:hover:text-black'}
                     >
                       {p.saved ? 'Editar' : 'Guardar'}
                     </Button>
@@ -1046,7 +1047,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                     <div className="col-span-3 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="font-medium">Ingredientes usados</p>
-                        <Button size="sm" variant="secondary" onClick={() => addIngredienteEtapa(pi)} disabled={!!p.saved}>
+                        <Button className={'dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:hover:text-black'} size="sm" variant="secondary" onClick={() => addIngredienteEtapa(pi)} disabled={!!p.saved}>
                           Agregar
                         </Button>
                       </div>
@@ -1206,6 +1207,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                       size="sm"
                       onClick={() => saveTecnica(idx)}
                       disabled={!t.nombre.trim() || !t.descripcion.trim() || t.saved}
+                      className={'hover:bg-white dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:hover:text-black'}
                     >
                       Guardar
                     </Button>
