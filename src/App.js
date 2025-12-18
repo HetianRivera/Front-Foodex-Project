@@ -98,8 +98,28 @@ export default function App() {
         recipesList = Array.isArray(data) ? data : (data?.results || []);
       }
 
-      // Guardar todas las recetas recibidas (sin recorte)
-      setRecipes(recipesList || []);
+      // Ordenar recetas: las más recientes primero.
+      const getRecencyValue = (r) => {
+        if (!r) return 0;
+        // Intentar campos de fecha comunes
+        const dateFields = ['fecha_creacion','fecha_creado','created_at','created','createdAt','fecha'];
+        for (const f of dateFields) {
+          const v = r[f];
+          if (v) {
+            const t = Date.parse(String(v));
+            if (!Number.isNaN(t)) return t;
+          }
+        }
+        // Si no hay fecha, usar id numérico como heurística (ids crecientes -> mayor = más reciente)
+        const idVal = r?.id_receta ?? r?.id ?? r?.id_receta;
+        if (idVal != null && !Number.isNaN(Number(idVal))) return Number(idVal);
+        return 0;
+      };
+
+      const sorted = (recipesList || []).slice().sort((a, b) => getRecencyValue(b) - getRecencyValue(a));
+
+      // Guardar todas las recetas recibidas (ordenadas por recencia)
+      setRecipes(sorted);
     } catch (err) {
       console.error('Error cargando recetas:', err);
       toast.error('Error al cargar las recetas');
