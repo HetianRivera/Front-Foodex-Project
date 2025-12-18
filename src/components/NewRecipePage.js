@@ -692,6 +692,21 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       setIsSaving(true);
       const saved = await createFullRecipe(receta);
 
+      // Si el servidor devolvió técnicas creadas, actualizar savedTecnicas localmente
+      try {
+        const serverTec = Array.isArray(saved?.tecnicas) ? saved.tecnicas : (Array.isArray(saved?.data?.tecnicas) ? saved.data.tecnicas : null);
+        if (Array.isArray(serverTec) && serverTec.length > 0) {
+          const normalized = serverTec.map(t => ({ nombre: t.nombre_tecnica || t.nombre || '', descripcion: t.descripcion || t.descripcion_tecnica || '' }));
+          setSavedTecnicas(prev => {
+            // merge unique by lowercased name
+            const map = {};
+            for (const p of prev) map[(p.nombre || '').toLowerCase()] = p;
+            for (const n of normalized) map[(n.nombre || '').toLowerCase()] = n;
+            return Object.values(map);
+          });
+        }
+      } catch (e) {}
+
       // Mostrar único mensaje de éxito al terminar el guardado
       onSave(saved);
       toast.success('Se ha guardado correctamente');

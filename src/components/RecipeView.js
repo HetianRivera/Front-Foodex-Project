@@ -38,7 +38,20 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
       aporte: data.aporte ?? null,
       montaje: data.detalle_montaje ?? data.montaje ?? data.detalle_montaje ?? '',
       procesos: [],
-      ingredientes: Array.isArray(data.ingredientes) ? data.ingredientes : (Array.isArray(data.receta_ingredientes) ? data.receta_ingredientes : []),
+      ingredientes: (() => {
+        const raw = Array.isArray(data.ingredientes) ? data.ingredientes : (Array.isArray(data.receta_ingredientes) ? data.receta_ingredientes : []);
+        const normalizeItem = (i) => ({
+          nombre: i?.nombre || i?.nombre_ingrediente || i?.name || null,
+          cantidad: i?.cantidad_ingrediente ?? i?.cantidad ?? i?.amount ?? null,
+          unidad: i?.unidad?.nombre_unidad ?? i?.unidad?.nombre ?? i?.unidad_name ?? i?.unidad ?? i?.unit ?? null,
+          ...i,
+        });
+        if (raw.length > 0 && raw[0] && Array.isArray(raw[0].ingredientes)) {
+          // categorized ingredients: keep categories, but normalize inner items
+          return raw.map(cat => ({ ...cat, ingredientes: Array.isArray(cat.ingredientes) ? cat.ingredientes.map(normalizeItem) : [] }));
+        }
+        return raw.map(normalizeItem);
+      })(),
       tecnicas: Array.isArray(data.tecnicas) ? data.tecnicas : (Array.isArray(data.tecnica) ? data.tecnica : []),
     };
 
@@ -62,6 +75,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
           etapa: e?.fase_etapa ?? e?.fase ?? e?.etapa ?? e?.orden ?? null,
           titulo: e?.nombre_etapa ?? e?.titulo ?? e?.nombre ?? e?.name ?? '',
           descripcion: e?.instruccion_etapa ?? e?.instruccion ?? e?.descripcion ?? e?.detalle ?? '',
+          instruccion_etapa: e?.instruccion_etapa ?? e?.instruccion ?? e?.descripcion ?? e?.detalle ?? '',
           tiempoEstimado: e?.tiempo_minutos ?? e?.tiempoCoccionMin ?? e?.tiempoEstimado ?? e?.tiempo ?? null,
           id_etapa: e?.id_etapa ?? e?.id ?? null,
           ingredientesUsados: (Array.isArray(e?.ingredientesUsados) ? e.ingredientesUsados : (Array.isArray(e?.ingredientes) ? e.ingredientes : [])).map(iu => ({
@@ -89,7 +103,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             const normalized = matches.map(iu => ({
               nombre: iu?.nombre || iu?.nombre_ingrediente || iu?.ingredient_name || iu?.name || null,
               cantidad: iu?.cantidad_ingrediente ?? iu?.cantidad ?? iu?.amount ?? null,
-              unidad: iu?.unidad ?? iu?.unidad_name ?? iu?.unit ?? null,
+              unidad: iu?.unidad?.nombre_unidad ?? iu?.unidad?.nombre ?? iu?.unidad_name ?? iu?.unidad ?? iu?.unit ?? null,
               tiempoCoccion: iu?.tiempo_coccion_minutos ?? iu?.tiempoCoccion ?? iu?.tiempo_coccion ?? iu?.tiempoCoccionMin ?? null,
               ...iu,
             }));
@@ -214,6 +228,38 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
     if (hours) parts.push(`${hours} ${hours === 1 ? 'h' : 'h'}`);
     if (mins) parts.push(`${mins} min`);
     return parts.join(' ');
+  };
+
+  const faseToLetter = (val, idxFallback) => {
+    const letters = ['A','B','C','D','E'];
+    if (val === null || val === undefined || val === '') {
+      return letters[idxFallback] ?? String(idxFallback+1);
+    }
+    // numeric -> map 1->A, 2->B
+    const asNum = Number(val);
+    if (Number.isFinite(asNum)) {
+      if (asNum >= 1 && asNum <= letters.length) return letters[asNum - 1];
+      return String(val);
+    }
+    const s = String(val).trim().toUpperCase();
+    if (s.length === 1 && s >= 'A' && s <= 'Z') return s;
+    // fallback to provided index
+    return letters[idxFallback] ?? s;
+  };
+
+  const getStageDescription = (p) => {
+    if (!p) return '';
+    return (
+      p.instruccion_etapa ??
+      p.instruccion ??
+      p.descripcion ??
+      p.detalle ??
+      p.descripcion_etapa ??
+      p.instrucciones ??
+      p.instruccion_texto ??
+      p.descripcion_etapa_text ??
+      ''
+    );
   };
 
   return (
@@ -353,14 +399,14 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                         <div key={i} className="p-4 bg-white dark:bg-slate-950 rounded-lg border-2 border-yellow-200 dark:border-yellow-800/40">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-3 min-w-0">
-                              <Badge variant="secondary" className="text-sm px-3 py-1 flex-shrink-0">{p.etapa ? `Fase ${p.etapa}` : `Fase ${i+1}`}</Badge>
+                              <Badge variant="secondary" className="text-sm px-3 py-1 flex-shrink-0">{`Fase ${faseToLetter(p.etapa ?? p.fase ?? p.orden, i)}`}</Badge>
                               <div className="text-lg font-semibold truncate">{p.titulo || `Etapa ${p.etapa || i+1}`}</div>
                             </div>
                             <div className="text-sm text-slate-500">{(p.tiempoEstimado || p.tiempo || p.tiempo_minutos) ? `${Number(p.tiempoEstimado || p.tiempo || p.tiempo_minutos)} min` : ''}</div>
                           </div>
                           <div className="text-sm text-slate-600 dark:text-slate-300 mb-3 break-words">
                             <strong className="block text-slate-700 dark:text-slate-300 mb-1">Descripción:</strong>
-                            <div className="whitespace-pre-wrap">{p.descripcion || ''}</div>
+                            <div className="whitespace-pre-wrap">{getStageDescription(p)}</div>
                           </div>
                           {Array.isArray(p.ingredientesUsados) && p.ingredientesUsados.length > 0 && (
                             <div className="mt-2">
@@ -371,7 +417,12 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                                     <div className="flex items-center justify-between">
                                       <div className="min-w-0 truncate">{ing.nombre || ing.nombre_ingrediente || ing.name}</div>
                                       <div className="text-sm text-slate-500 ml-4 flex-shrink-0">
-                                        {ing.cantidad != null ? `${formatUnit(ing.cantidad, ing.unidad || 'gr')}` : ''}
+                                        {(() => {
+                                          const qty = ing.cantidad ?? ing.cantidad_ingrediente ?? ing.amount ?? null;
+                                          let unit = ing.unidad ?? null;
+                                          if (unit && typeof unit === 'object') unit = unit.nombre_unidad ?? unit.nombre ?? unit.name ?? unit.sigla ?? null;
+                                          return qty != null ? `${formatUnit(qty, unit || 'gr')}` : '';
+                                        })()}
                                         {ing.tiempoCoccion != null ? ` · Tiempo cocción: ${Number(ing.tiempoCoccion)} min` : ''}
                                       </div>
                                     </div>
@@ -398,7 +449,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                   .filter(categoria => categoria.ingredientes && categoria.ingredientes.length > 0)
                   .map((categoria, idx) => (
                     <Card key={idx} className="dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
-                      <CardHeader className="bg-slate-100 dark:bg-slate-800 pb-6 transition-colors duration-500">
+                      <CardHeader className="bg-slate-100 dark:bg-slate-800 pb-6 transition-colors duration-500"> 
                         <CardTitle className="text-2xl flex items-center gap-3">
                           <Badge variant="secondary" className="text-xl px-5 py-2">
                             {categoria.categoria}
@@ -415,7 +466,12 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                           <TableBody>
                             {categoria.ingredientes.map((ing, ingIdx) => (
                               <TableRow key={ingIdx} className="text-lg dark:border-slate-700">
-                                <TableCell className="text-xl py-5">{ing.nombre}</TableCell>
+                                <TableCell className="text-xl py-5">
+                                  <div className="flex items-center justify-between">
+                                    <div className="min-w-0 truncate">{ing.nombre}</div>
+                                    <div className="text-sm text-slate-500 ml-4 flex-shrink-0">{ing.cantidad != null ? `${formatUnit(ing.cantidad, ing.unidad || 'gr')}` : ''}</div>
+                                  </div>
+                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -438,7 +494,17 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                       <TableBody>
                         {recipe.ingredientes.map((ing, idx) => (
                           <TableRow key={idx} className="text-lg dark:border-slate-700">
-                            <TableCell className="text-xl py-5">{ing.nombre || ing.nombre_ingrediente || ing.name}</TableCell>
+                            <TableCell className="text-xl py-5">
+                              <div className="flex items-center justify-between">
+                                <div className="min-w-0 truncate">{ing.nombre || ing.nombre_ingrediente || ing.name}</div>
+                                <div className="text-sm text-slate-500 ml-4 flex-shrink-0">{(() => {
+                                    const qty = ing.cantidad ?? ing.cantidad_ingrediente ?? ing.amount ?? null;
+                                    let unit = ing.unidad ?? null;
+                                    if (unit && typeof unit === 'object') unit = unit.nombre_unidad ?? unit.nombre ?? unit.name ?? unit.sigla ?? null;
+                                    return qty != null ? `${formatUnit(qty, unit || 'gr')}` : '';
+                                  })()}</div>
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -449,6 +515,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             ) : (
               <div className="text-slate-600 dark:text-slate-300">No hay ingredientes registrados</div>
             )}
+
           </TabsContent>
 
           {/* Técnicas Tab con estructura combinada (nombre + descripción) */}
