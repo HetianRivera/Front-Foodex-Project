@@ -63,8 +63,39 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
           titulo: e?.nombre_etapa ?? e?.titulo ?? e?.nombre ?? e?.name ?? '',
           descripcion: e?.instruccion_etapa ?? e?.instruccion ?? e?.descripcion ?? e?.detalle ?? '',
           tiempoEstimado: e?.tiempo_minutos ?? e?.tiempoCoccionMin ?? e?.tiempoEstimado ?? e?.tiempo ?? null,
-          ingredientesUsados: Array.isArray(e?.ingredientesUsados) ? e.ingredientesUsados : (Array.isArray(e?.ingredientes) ? e.ingredientes : []),
+          id_etapa: e?.id_etapa ?? e?.id ?? null,
+          ingredientesUsados: (Array.isArray(e?.ingredientesUsados) ? e.ingredientesUsados : (Array.isArray(e?.ingredientes) ? e.ingredientes : [])).map(iu => ({
+            nombre: iu?.nombre || iu?.nombre_ingrediente || iu?.name || null,
+            cantidad: iu?.cantidad_ingrediente ?? iu?.cantidad ?? iu?.amount ?? null,
+            unidad: iu?.unidad ?? iu?.unidad_name ?? iu?.unit ?? null,
+            tiempoCoccion: iu?.tiempo_coccion_minutos ?? iu?.tiempoCoccion ?? iu?.tiempo_coccion ?? iu?.tiempoCoccionMin ?? null,
+            ...iu,
+          })),
         }));
+
+        // If etapas don't include ingredientesUsados, try to attach from top-level etapa_ingredientes
+        const etapaIngsGlobal = Array.isArray(data?.etapa_ingredientes) ? data.etapa_ingredientes : (Array.isArray(data?.etapaIngredientes) ? data.etapaIngredientes : (Array.isArray(data?.etapa_ingredientes_list) ? data.etapa_ingredientes_list : []));
+        if (Array.isArray(etapaIngsGlobal) && etapaIngsGlobal.length > 0) {
+          r.procesos = r.procesos.map(pr => {
+            if (Array.isArray(pr.ingredientesUsados) && pr.ingredientesUsados.length > 0) return pr;
+            // match by id_etapa or etapa/fase
+            const matches = etapaIngsGlobal.filter(ei => {
+              const idCandidate = (ei.id_etapa ?? ei.etapa ?? ei.id);
+              const idMatch = pr.id_etapa && (idCandidate === pr.id_etapa);
+              const faseMatch = pr.etapa && ((String(ei.fase_etapa || ei.fase || ei.etapa || ei.etapa_id || ei.etapa) === String(pr.etapa)) || (String(ei.fase || ei.etapa) === String(pr.etapa)));
+              return idMatch || faseMatch;
+            });
+            if (!matches || matches.length === 0) return pr;
+            const normalized = matches.map(iu => ({
+              nombre: iu?.nombre || iu?.nombre_ingrediente || iu?.ingredient_name || iu?.name || null,
+              cantidad: iu?.cantidad_ingrediente ?? iu?.cantidad ?? iu?.amount ?? null,
+              unidad: iu?.unidad ?? iu?.unidad_name ?? iu?.unit ?? null,
+              tiempoCoccion: iu?.tiempo_coccion_minutos ?? iu?.tiempoCoccion ?? iu?.tiempo_coccion ?? iu?.tiempoCoccionMin ?? null,
+              ...iu,
+            }));
+            return { ...pr, ingredientesUsados: normalized };
+          });
+        }
       }
     } catch (e) {
       console.warn('[RecipeView] normalize stages parse error', e);
@@ -318,19 +349,33 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                         const nb = Number(b?.etapa ?? b?.fase ?? b?.orden) || 0;
                         return na - nb;
                       })
-                      .map((p, i) => (
+                        .map((p, i) => (
                         <div key={i} className="p-4 bg-white dark:bg-slate-950 rounded-lg border-2 border-yellow-200 dark:border-yellow-800/40">
                           <div className="flex items-center justify-between mb-2">
-                            <div className="text-lg font-semibold truncate">{p.titulo || `Etapa ${p.etapa || i+1}`}</div>
-                            <div className="text-sm text-slate-500">{p.tiempoEstimado ? `${p.tiempoEstimado} min` : ''}</div>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Badge variant="secondary" className="text-sm px-3 py-1 flex-shrink-0">{p.etapa ? `Fase ${p.etapa}` : `Fase ${i+1}`}</Badge>
+                              <div className="text-lg font-semibold truncate">{p.titulo || `Etapa ${p.etapa || i+1}`}</div>
+                            </div>
+                            <div className="text-sm text-slate-500">{(p.tiempoEstimado || p.tiempo || p.tiempo_minutos) ? `${Number(p.tiempoEstimado || p.tiempo || p.tiempo_minutos)} min` : ''}</div>
                           </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-300 mb-3 truncate">{p.descripcion || ''}</div>
+                          <div className="text-sm text-slate-600 dark:text-slate-300 mb-3 break-words">
+                            <strong className="block text-slate-700 dark:text-slate-300 mb-1">Descripción:</strong>
+                            <div className="whitespace-pre-wrap">{p.descripcion || ''}</div>
+                          </div>
                           {Array.isArray(p.ingredientesUsados) && p.ingredientesUsados.length > 0 && (
                             <div className="mt-2">
                               <div className="text-sm text-slate-500 mb-1">Ingredientes:</div>
                               <ul className="list-disc list-inside text-sm">
                                 {p.ingredientesUsados.map((ing, idx) => (
-                                  <li key={idx} className="truncate">{ing.nombre || ing.nombre_ingrediente || ing.name} {ing.cantidad ? `— ${ing.cantidad}${ing.unidad ? ' ' + ing.unidad : ''}` : ''}</li>
+                                  <li key={idx} className="truncate">
+                                    <div className="flex items-center justify-between">
+                                      <div className="min-w-0 truncate">{ing.nombre || ing.nombre_ingrediente || ing.name}</div>
+                                      <div className="text-sm text-slate-500 ml-4 flex-shrink-0">
+                                        {ing.cantidad != null ? `${formatUnit(ing.cantidad, ing.unidad || 'gr')}` : ''}
+                                        {ing.tiempoCoccion != null ? ` · Tiempo cocción: ${Number(ing.tiempoCoccion)} min` : ''}
+                                      </div>
+                                    </div>
+                                  </li>
                                 ))}
                               </ul>
                             </div>
@@ -345,45 +390,65 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             </Card>
           </TabsContent>
 
-          {/* Ingredientes Tab (sin columnas de costos) */}
+          {/* Ingredientes Tab (solo nombre del ingrediente) */}
           <TabsContent value="ingredientes" className="space-y-6">
-            {recipe.ingredientes
-              .filter(categoria => categoria.ingredientes && categoria.ingredientes.length > 0)
-              .map((categoria, idx) => (
-                <Card key={idx} className="dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
+            {Array.isArray(recipe.ingredientes) && recipe.ingredientes.length > 0 ? (
+              Array.isArray(recipe.ingredientes[0].ingredientes) ? (
+                recipe.ingredientes
+                  .filter(categoria => categoria.ingredientes && categoria.ingredientes.length > 0)
+                  .map((categoria, idx) => (
+                    <Card key={idx} className="dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
+                      <CardHeader className="bg-slate-100 dark:bg-slate-800 pb-6 transition-colors duration-500">
+                        <CardTitle className="text-2xl flex items-center gap-3">
+                          <Badge variant="secondary" className="text-xl px-5 py-2">
+                            {categoria.categoria}
+                          </Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-6">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="dark:border-slate-700">
+                              <TableHead className="text-xl py-4">Ingrediente</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {categoria.ingredientes.map((ing, ingIdx) => (
+                              <TableRow key={ingIdx} className="text-lg dark:border-slate-700">
+                                <TableCell className="text-xl py-5">{ing.nombre}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                  ))
+              ) : (
+                <Card className="dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
                   <CardHeader className="bg-slate-100 dark:bg-slate-800 pb-6 transition-colors duration-500">
-                    <CardTitle className="text-2xl flex items-center gap-3">
-                      <Badge variant="secondary" className="text-xl px-5 py-2">
-                        {categoria.categoria}
-                      </Badge>
-                    </CardTitle>
+                    <CardTitle className="text-2xl">Ingredientes</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-6">
                     <Table>
                       <TableHeader>
                         <TableRow className="dark:border-slate-700">
                           <TableHead className="text-xl py-4">Ingrediente</TableHead>
-                          <TableHead className="text-xl py-4">Cantidad</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {categoria.ingredientes.map((ing, ingIdx) => (
-                          <TableRow key={ingIdx} className="text-lg dark:border-slate-700">
-                            <TableCell className="text-xl py-5">{ing.nombre}</TableCell>
-                            <TableCell className="text-xl py-5">
-                              <Badge variant="outline" className="text-lg px-4 py-2">
-                                {formatUnit(ing.cantidad ?? ing.cantidad_ingrediente ?? ing.amount, ing.unidad ?? ing.unidad_name ?? ing.unit)}
-                              </Badge>
-                            </TableCell>
+                        {recipe.ingredientes.map((ing, idx) => (
+                          <TableRow key={idx} className="text-lg dark:border-slate-700">
+                            <TableCell className="text-xl py-5">{ing.nombre || ing.nombre_ingrediente || ing.name}</TableCell>
                           </TableRow>
                         ))}
-                        <TableRow className="bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 transition-colors duration-500"> 
-                        </TableRow>
                       </TableBody>
                     </Table>
                   </CardContent>
                 </Card>
-              ))}
+              )
+            ) : (
+              <div className="text-slate-600 dark:text-slate-300">No hay ingredientes registrados</div>
+            )}
           </TabsContent>
 
           {/* Técnicas Tab con estructura combinada (nombre + descripción) */}
