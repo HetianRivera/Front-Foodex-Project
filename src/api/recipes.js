@@ -390,15 +390,43 @@ function filterListByKeys(list, keys, value) {
 // `procesos` como array de etapas con `ingredientesUsados`, `tecnicas`, etc.).
 export async function getFullRecipe(recetaId) {
   if (!recetaId) throw new Error('recetaId requerido');
+  // 1) Intentar obtener TODO desde el endpoint robusto y mapear a formato UI.
   const base = await getRecipe(recetaId).catch(() => null);
+  if (base) {
+    // Detectar si el endpoint robusto ya incluye relaciones
+    const hasRelations =
+      (Array.isArray(base.ingredientes) && base.ingredientes.length > 0) ||
+      (Array.isArray(base.receta_ingredientes) && base.receta_ingredientes.length > 0) ||
+      (Array.isArray(base.etapas) && base.etapas.length > 0) ||
+      (Array.isArray(base.receta_etapas) && base.receta_etapas.length > 0) ||
+      (Array.isArray(base.tecnicas) && base.tecnicas.length > 0) ||
+      (Array.isArray(base.tecnica) && base.tecnica.length > 0);
+
+    if (hasRelations) {
+      const item = base.receta ? { ...(base.receta || {}), ...base } : { ...base };
+      const mapped = { ...item };
+      mapped.id_receta = mapped.id_receta ?? mapped.id ?? null;
+      mapped.nombre = mapped.nombre_receta ?? mapped.nombre ?? mapped.title ?? '';
+      mapped.codigo = mapped.codigo_receta ?? mapped.codigo ?? mapped.code ?? null;
+      mapped.anio = mapped.anio ?? mapped.year ?? null;
+
+      mapped.ingredientes = base.ingredientes ?? base.receta_ingredientes ?? mapped.ingredientes ?? [];
+      mapped.procesos = base.etapas ?? base.receta_etapas ?? base.procesos ?? mapped.procesos ?? [];
+      mapped.tecnicas = base.tecnicas ?? base.tecnica ?? mapped.tecnicas ?? [];
+      mapped.etapa_ingredientes = base.etapa_ingredientes ?? mapped.etapa_ingredientes ?? [];
+
+      return mapped;
+    }
+  }
+
+  // 2) Fallback: si el endpoint robusto no devuelve relaciones, consultar endpoints relacionados
   const result = base ? { ...base } : { id_receta: recetaId };
 
-  // 1) receta-ingredientes -> ingredientes (detallados)
+  // receta-ingredientes -> ingredientes (detallados)
   let recetaIngs = [];
   try {
     const data = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, recetaId);
     recetaIngs = Array.isArray(data) ? data : (data?.results || []);
-    // Filtrar solo los enlaces que pertenezcan a esta receta
     recetaIngs = filterListByKeys(recetaIngs, ['id_receta','receta','receta_id','id_receta_id','id_receta_ingrediente','recetaIngrediente','id_receta_ingrediente'], recetaId);
   } catch (e) {
     recetaIngs = [];
@@ -412,19 +440,19 @@ export async function getFullRecipe(recetaId) {
     if (ingId) {
       try { ingDetail = await tryFetchDetail(RELATED_ENDPOINTS.ingredientes, ingId); } catch (e) { ingDetail = null; }
     }
-    const nombre = ingDetail?.nombre || ri.nombre || ri.nombre_ingrediente || ri.nombre_ingrediente || null;
-    const cantidad = ri.cantidad_ingrediente ?? ri.cantidad ?? ri.cantidad_ingrediente ?? null;
+    const nombre = ingDetail?.nombre || ri.nombre || ri.nombre_ingrediente || null;
+    const cantidad = ri.cantidad_ingrediente ?? ri.cantidad ?? null;
     const unidad = ingDetail?.unidad || ri.unidad || null;
     const categoria = ingDetail?.categoria || ri.categoria || 'Sin categoría';
     const ingObj = { id_ingrediente: ingId, nombre, cantidad, unidad, ...(ingDetail || {}) };
-    ingredientesById[ingId] = ingObj;
+    if (ingId) ingredientesById[ingId] = ingObj;
     if (!categoriaMap[categoria]) categoriaMap[categoria] = [];
     categoriaMap[categoria].push(ingObj);
   }
 
   result.ingredientes = Object.keys(categoriaMap).map(cat => ({ categoria: cat, ingredientes: categoriaMap[cat] }));
 
-  // 2) receta-etapas -> procesos (etapas) y sus ingredientes (etapa-ingredientes)
+  // receta-etapas -> procesos (etapas) y sus ingredientes (etapa-ingredientes)
   let recetaEtapas = [];
   try {
     const data = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaEtapas, recetaId);
@@ -470,16 +498,14 @@ export async function getFullRecipe(recetaId) {
   }
   result.procesos = procesos;
 
-  // 3) Técnicas: intentar ligar técnicas a partir de ingrediente-tecnica
+  // Técnicas: intentar ligar técnicas a partir de ingrediente-tecnica
   const tecnicaIds = new Set();
   try {
-    // Obtener links ingrediente-tecnica para los ingredientes de la receta
     const allIngIds = Object.keys(ingredientesById).filter(Boolean);
     for (const ingId of allIngIds) {
       try {
         const links = await tryGetOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, ingId).catch(() => []);
         const arr = Array.isArray(links) ? links : (links?.results || []);
-        // Filtrar por id_ingrediente para evitar enlaces globales
         const filtered = filterListByKeys(arr, ['id_ingrediente','ingrediente','id'], ingId);
         for (const l of filtered) {
           const tid = l.id_tecnica ?? l.tecnica ?? l.id ?? l.id_tecnica_id;
