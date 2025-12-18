@@ -315,13 +315,15 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
           </div>
 
           {/* Paginador */}
-          <div className="flex items-center justify-center gap-3 mt-8">
-            <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>Anterior</Button>
+          {totalPages > 1 && (
+          <div className='flex item-center justify-center gap-3 mt-8'>
+            <button variant='outline' onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>Anterior</button>
             {Array.from({ length: totalPages }).map((_, i) => (
-              <Button key={i} variant={i + 1 === page ? 'secondary' : 'ghost'} onClick={() => setPage(i + 1)}>{i + 1}</Button>
+              <button key={i} variant={i + 1 === page ? 'secondary' : 'ghost'} onClick={() => setPage(i + 1)}>{i + 1}</button>
             ))}
-            <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Siguiente</Button>
-          </div>
+            <button variant='outline' onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Siguiente</button>
+          </div>  )
+          }
         </div>
       </div>
 
