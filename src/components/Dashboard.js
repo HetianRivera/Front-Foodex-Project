@@ -278,6 +278,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-5">
+                  <p className="font-semibold text-xl dark:text-slate-200 transition-colors duration-300 ease-in-out">Descripcion</p>
                   <p className="text-lg text-slate-600 leading-relaxed dark:text-slate-300 transition-colors duration-300 ease-in-out">
                     {shortDescription(recipe) || 'Sin descripción'}
                   </p>
