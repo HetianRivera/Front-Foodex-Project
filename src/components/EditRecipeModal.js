@@ -295,7 +295,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Tiempo (min)</label>
                   <Input
@@ -325,22 +325,6 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                     onKeyDown={preventDecimalKey}
                     onPaste={preventDecimalPaste}
                     placeholder="1"
-                    className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Calorías</label>
-                  <Input
-                    name="aporte"
-                    type="number"
-                    step={1}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={formData.aporte}
-                    onChange={handleChange}
-                    onKeyDown={preventDecimalKey}
-                    onPaste={preventDecimalPaste}
-                    placeholder="0"
                     className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                   />
                 </div>
@@ -596,18 +580,6 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                   onChange={handleChange}
                   placeholder="Describe cómo presentar el plato..."
                   rows={4}
-                  className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Argumentación Comercial</label>
-                <Textarea
-                  name="argumentacionComercial"
-                  value={formData.argumentacionComercial}
-                  onChange={handleChange}
-                  placeholder="Describe los beneficios del plato..."
-                  rows={3}
                   className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                 />
               </div>

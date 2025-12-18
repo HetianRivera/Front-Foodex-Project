@@ -69,9 +69,6 @@ export function DashboardHeader({ user, onLogout, children }) {
             <div className="text-right">
               <p className="text-lg text-slate-300">Bienvenido/a</p>
               <p className="text-2xl mb-2">{user.name}</p>
-              <Badge variant={(user.role || '').toLowerCase().includes('profesor') ? 'default' : 'secondary'} className={`text-lg px-4 py-1 ${(user.role || '').toLowerCase().includes('profesor') ? 'bg-red-700 text-white dark:bg-red-800' : ''}`}>
-                {(user.role || '').toLowerCase().includes('profesor') ? 'Profesor' : 'Alumno'}
-              </Badge>
             </div>
             {onLogout && (
                <Button onClick={onLogout} size="lg" className="p-6 text-lg bg-red-700 hover:bg-red-900 text-white dark:bg-red-800 dark:hover:bg-red-700 transition-colors duration-300 ease-in-out">
