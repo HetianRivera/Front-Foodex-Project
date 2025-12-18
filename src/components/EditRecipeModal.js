@@ -55,6 +55,20 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [openStageIndex, setOpenStageIndex] = useState(0);
+  const [tecnicas, setTecnicas] = useState(() => {
+    try {
+      const list = recipe?.tecnicas || recipe?.tecnica || [];
+      if (!Array.isArray(list)) return [];
+      return list.map(t => ({ nombre: t.nombre || t.nombre_tecnica || '', descripcion: t.descripcion || t.descripcion_tecnica || '', saved: true }));
+    } catch (e) { return []; }
+  });
+  const [savedTecnicas, setSavedTecnicas] = useState(() => {
+    try {
+      const list = recipe?.tecnicas || recipe?.tecnica || [];
+      if (!Array.isArray(list)) return [];
+      return list.map(t => ({ nombre: t.nombre || t.nombre_tecnica || '', descripcion: t.descripcion || t.descripcion_tecnica || '' }));
+    } catch (e) { return []; }
+  });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -178,6 +192,38 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
     );
   };
 
+  // Técnicas
+  const addTecnica = () => {
+    setTecnicas(prev => [...prev, { nombre: '', descripcion: '', saved: false }]);
+  };
+
+  const updateTecnica = (index, key, value) => {
+    setTecnicas(prev => prev.map((t, i) => (i === index ? { ...t, [key]: value } : t)));
+  };
+
+  const removeTecnica = (index) => {
+    setTecnicas(prev => prev.filter((_, i) => i !== index));
+    setSavedTecnicas(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const saveTecnica = (index) => {
+    const t = tecnicas[index];
+    if (!t) return;
+    if (!t.nombre?.trim() || !t.descripcion?.trim()) {
+      toast.error('Completa nombre y descripción de la técnica');
+      return;
+    }
+    setTecnicas(prev => prev.map((x, i) => (i === index ? { ...x, saved: true } : x)));
+    setSavedTecnicas(prev => {
+      const existingIdx = prev.findIndex(x => x.nombre.trim().toLowerCase() === t.nombre.trim().toLowerCase());
+      const entry = { nombre: t.nombre.trim(), descripcion: t.descripcion.trim() };
+      if (existingIdx >= 0) {
+        const copy = [...prev]; copy[existingIdx] = { ...copy[existingIdx], ...entry }; return copy;
+      }
+      return [...prev, entry];
+    });
+  };
+
   const updateIngredienteEtapa = (stageIndex, ingredientIndex, key, value) => {
     setProcesos(prev =>
       prev.map((p, i) =>
@@ -251,6 +297,10 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
             tiempoCoccion: Number(i.tiempoCoccion) || 0
           }))
         }))
+        ,
+        tecnicas: (savedTecnicas && savedTecnicas.length > 0)
+          ? savedTecnicas.map(t => ({ nombre_tecnica: t.nombre || '', descripcion: t.descripcion || '' }))
+          : (recipe?.tecnicas || recipe?.tecnica || [])
       });
     } finally {
       setLoading(false);
@@ -611,6 +661,38 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                   rows={4}
                   className="text-base dark:text-white dark:bg-slate-800 dark:border-slate-700 dark:placeholder-slate-400 dark:focus:ring-slate-600 dark:focus:border-slate-600"
                 />
+              </div>
+
+              <div className="border rounded p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-base font-semibold">Técnicas</h4>
+                  <Button type="button" size="sm" variant="secondary" onClick={addTecnica} className="flex items-center gap-1">
+                    <Plus className="w-4 h-4" /> Agregar
+                  </Button>
+                </div>
+
+                {tecnicas.length === 0 && <p className="text-sm text-slate-500">No hay técnicas registradas.</p>}
+
+                <div className="space-y-3">
+                  {tecnicas.map((t, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded dark:bg-slate-900">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs mb-1">Nombre</label>
+                          <Input value={t.nombre} onChange={e => updateTecnica(idx, 'nombre', e.target.value)} className="text-sm" />
+                        </div>
+                        <div className="flex items-end justify-end gap-2">
+                          <Button size="sm" onClick={() => saveTecnica(idx)}>{t.saved ? 'Guardada' : 'Guardar'}</Button>
+                          <Button size="sm" variant="destructive" onClick={() => removeTecnica(idx)}><Trash2 className="w-4 h-4" /></Button>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs mb-1">Descripción</label>
+                          <Textarea rows={3} value={t.descripcion} onChange={e => updateTecnica(idx, 'descripcion', e.target.value)} className="text-sm" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </TabsContent>
           </Tabs>

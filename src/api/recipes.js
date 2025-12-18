@@ -203,7 +203,29 @@ export async function toBackendRecetaCompletaPayload(recipe) {
 
 export async function createRecipe(recipe) {
   const payload = await toBackendRecetaCompletaPayload(recipe);
-  return tryRequestSingle('post', '', payload);
+  const created = await tryRequestSingle('post', '', payload);
+  // If the UI provided técnicas that don't exist in the backend, try to create them
+  try {
+    if (Array.isArray(recipe?.tecnicas) && recipe.tecnicas.length > 0) {
+      for (const t of recipe.tecnicas) {
+        const hasId = t?.id_tecnica ?? t?.id ?? null;
+        if (hasId) continue;
+        const body = {
+          // provide multiple name/description variants for backend compatibility
+          nombre_tecnica: t?.nombre || t?.nombre_tecnica || t?.name || '',
+          nombre: t?.nombre || t?.nombre_tecnica || t?.name || '',
+          descripcion: t?.descripcion ?? null,
+          descripcion_tecnica: t?.descripcion ?? t?.descripcion_tecnica ?? null,
+        };
+        try {
+          await api.post(RELATED_ENDPOINTS.tecnicas[0], body);
+        } catch (e) {
+          // ignore per-item errors
+        }
+      }
+    }
+  } catch (e) {}
+  return created;
 }
 
 export async function getRecipe(id) {
@@ -249,7 +271,26 @@ export async function listRecipes(params = {}) {
 
 export async function updateRecipe(id, patch) {
   const idSeg = `${encodeURIComponent(id)}/`;
-  return tryRequestSingle('put', idSeg, patch);
+  const updated = await tryRequestSingle('put', idSeg, patch);
+  // Also ensure técnicas are persisted via the técnicas endpoint for any new entries
+  try {
+    if (Array.isArray(patch?.tecnicas) && patch.tecnicas.length > 0) {
+      for (const t of patch.tecnicas) {
+        const hasId = t?.id_tecnica ?? t?.id ?? null;
+        if (hasId) continue;
+        const body = {
+          nombre_tecnica: t?.nombre || t?.nombre_tecnica || t?.name || '',
+          nombre: t?.nombre || t?.nombre_tecnica || t?.name || '',
+          descripcion: t?.descripcion ?? null,
+          descripcion_tecnica: t?.descripcion ?? t?.descripcion_tecnica ?? null,
+        };
+        try {
+          await api.post(RELATED_ENDPOINTS.tecnicas[0], body);
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
+  return updated;
 }
 
 export async function deleteRecipe(id) {
@@ -672,13 +713,22 @@ export async function createFullRecipe(uiRecipe) {
         }
         const toPost = {
           nombre_tecnica: t.nombre_tecnica || t.nombre || t.name || undefined,
+          nombre: t.nombre || t.nombre_tecnica || t.name || undefined,
           descripcion: t.descripcion || t.descripcion_tecnica || undefined,
+          descripcion_tecnica: t.descripcion || t.descripcion_tecnica || undefined,
         };
         try {
           const resp = await postOverCandidates(RELATED_ENDPOINTS.tecnicas, toPost).catch(() => null);
           if (resp) {
             const id = resp.id_tecnica ?? resp.id ?? resp.id_tecnica_id ?? null;
-            created.push({ ...(resp || {}), id_tecnica: id, nombre_tecnica: resp.nombre_tecnica || resp.nombre || (toPost.nombre_tecnica || undefined), descripcion: resp.descripcion || toPost.descripcion });
+            created.push({
+              ...(resp || {}),
+              id_tecnica: id,
+              nombre_tecnica: resp.nombre_tecnica || resp.nombre || (toPost.nombre_tecnica || undefined),
+              nombre: resp.nombre || resp.nombre_tecnica || (toPost.nombre || undefined),
+              descripcion: resp.descripcion || resp.descripcion_tecnica || toPost.descripcion,
+              descripcion_tecnica: resp.descripcion_tecnica || resp.descripcion || toPost.descripcion_tecnica,
+            });
             continue;
           }
         } catch (e) {}
