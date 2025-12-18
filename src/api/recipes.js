@@ -97,10 +97,18 @@ export function toBackendRecetaCompletaPayload(recipe) {
 
   const mapEtapa = (e, idx) => ({
     id_etapa: e?.id_etapa ?? genRecetaEtapaId(0, idx + 1),
-    nombre_etapa: (e?.nombre_etapa || e?.nombre || e?.title || '').toString().trim(),
-    tiempo_minutos: e?.tiempo_minutos ?? e?.tiempo ?? null
+    nombre_etapa: (e?.nombre_etapa || e?.nombre || e?.title || e?.titulo || '').toString().trim(),
+    tiempo_minutos: e?.tiempo_minutos ?? e?.tiempo ?? e?.tiempoEstimado ?? null,
+    descripcion: e?.descripcion ?? e?.instruccion_etapa ?? e?.instruccion ?? null,
+    instruccion_etapa: e?.instruccion_etapa ?? e?.instruccion ?? e?.descripcion ?? null,
   });
-  const etapas = Array.isArray(recipe?.etapas) ? recipe.etapas.map(mapEtapa) : [];
+  // Aceptar `etapas` o su sinónimo `procesos` desde la UI (NewRecipePage usa `procesos`)
+  const etapasSource = Array.isArray(recipe?.etapas)
+    ? recipe.etapas
+    : Array.isArray(recipe?.procesos)
+    ? recipe.procesos
+    : [];
+  const etapas = etapasSource.map(mapEtapa);
 
   const receta_etapas = Array.isArray(recipe?.receta_etapas)
     ? recipe.receta_etapas.map((re, idx) => ({
@@ -129,7 +137,14 @@ export function toBackendRecetaCompletaPayload(recipe) {
     })));
   }
 
-  const tecnicas = Array.isArray(recipe?.tecnicas) ? recipe.tecnicas.map(t => ({ nombre_tecnica: t.nombre_tecnica || t.nombre || t.name || '', descripcion: t.descripcion || null })) : [];
+  // Mapear técnicas asegurando nombres en varios formatos para compatibilidad con APIs distintas
+  const tecnicas = Array.isArray(recipe?.tecnicas)
+    ? recipe.tecnicas.map(t => ({
+        nombre_tecnica: t.nombre_tecnica || t.nombre || t.name || '',
+        nombre: t.nombre || t.nombre_tecnica || t.name || '',
+        descripcion: t.descripcion ?? t.descripcion_tecnica ?? null,
+      }))
+    : [];
 
   const ingrediente_tecnica = Array.isArray(recipe?.ingrediente_tecnica)
     ? recipe.ingrediente_tecnica.map(it => ({ id_ingrediente: it.id_ingrediente ?? null, id_tecnica: it.id_tecnica ?? null, id_ingrediente_tecnica: it.id_ingrediente_tecnica ?? null }))
@@ -514,6 +529,12 @@ export async function createFullRecipe(uiRecipe) {
   // Normalizar ingredientes y construir payload completo
   try { uiRecipe = normalizeIngredientsInRecipe(uiRecipe); } catch {}
   const payload = toBackendRecetaCompletaPayload(uiRecipe);
+  // Log del payload para depuración cuando estén activadas las trazas
+  try {
+    if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+      console.debug('[createFullRecipe] payload:', payload);
+    }
+  } catch (e) {}
   // Enviar todo en un solo POST al endpoint robusto
   const resp = await tryRequestSingle('post', '', payload);
   return resp;

@@ -165,7 +165,22 @@ export default function App() {
   };
 
   const handleAddRecipe = (newRecipe) => {
-    setRecipes((prev) => [{ ...newRecipe }, ...prev]);
+    // Normalizar respuesta del API (puede venir anidada en { receta, ... })
+    const normalize = (item) => {
+      if (!item) return item;
+      const src = item.receta ? { ...(item.receta || {}), ...item } : { ...item };
+      const obj = { ...src };
+      obj.id_receta = obj.id_receta ?? obj.id ?? (item.receta && item.receta.id_receta) ?? null;
+      obj.nombre = obj.nombre_receta ?? obj.nombre ?? obj.title ?? obj.nombre_receta;
+      obj.codigo = obj.codigo_receta ?? obj.codigo ?? obj.code ?? null;
+      obj.ingredientes = item.ingredientes ?? item.receta_ingredientes ?? obj.ingredientes ?? [];
+      obj.procesos = item.etapas ?? item.receta_etapas ?? item.procesos ?? obj.procesos ?? [];
+      obj.tecnicas = item.tecnicas ?? item.tecnica ?? obj.tecnicas ?? [];
+      return obj;
+    };
+
+    const normalized = normalize(newRecipe);
+    setRecipes((prev) => [{ ...normalized }, ...prev]);
   };
 
   const handleStartNewRecipe = () => {
