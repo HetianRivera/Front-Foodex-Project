@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Textarea } from './ui/textarea';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell } from 'docx';
 import { toast } from 'sonner';
+import { ChevronDown, Trash2 } from 'lucide-react';
 import {
   createRecipe,
   createFullRecipe,
@@ -52,7 +53,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
   const [imagenFile, setImagenFile] = useState(null);
 
   const [porcion, setPorcion] = useState(1);
-  const [gramajePorPorcion, setGramajePorPorcion] = useState(0);
+
 
   const [tiempo, setTiempo] = useState(0);
   const [tareaInicio, setTareaInicio] = useState('');
@@ -69,16 +70,10 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     CATEGORIES.map(c => ({ categoria: c, ingredientes: [] }))
   );
 
-  const [procesos, setProcesos] = useState(
-    STAGES.map(etapa => ({
-      etapa,
-      titulo: '',
-      descripcion: '',
-      tiempoEstimado: 0,
-      saved: false,
-      ingredientesUsados: [],
-    }))
-  );
+  // Inicializar con una etapa mínima (A). El usuario puede agregar hasta 5 (A-E).
+  const [procesos, setProcesos] = useState([
+    { etapa: STAGES[0], titulo: '', descripcion: '', tiempoEstimado: 0, saved: false, ingredientesUsados: [] }
+  ]);
 
   const [openStageIndex, setOpenStageIndex] = useState(0);
 
@@ -167,6 +162,11 @@ export function NewRecipePage({ onCancel, onSave, user }) {
   };
 
   const removeIngredient = (categoriaIndex, ingredientIndex) => {
+    // Determine ingredient entry (name + unidad + optional _id) before removing
+    const ingEntry = ingredientesCategorias?.[categoriaIndex]?.ingredientes?.[ingredientIndex] || {};
+    const ingName = String(ingEntry.nombre || '').trim();
+    const ingUnidad = String(ingEntry.unidad || '').trim();
+
     setIngredientesCategorias(prev =>
       prev.map((cat, i) =>
         i === categoriaIndex
@@ -174,6 +174,27 @@ export function NewRecipePage({ onCancel, onSave, user }) {
           : cat
       )
     );
+
+    if (ingName) {
+      // Remove matching saved ingrediente by name+unidad or by _id if available
+      setSavedIngredientes(prev => prev.filter(si => {
+        if (ingEntry._id) return si._id !== ingEntry._id;
+        return !(String(si.nombre).trim() === ingName && String(si.unidad || '').trim() === ingUnidad);
+      }));
+
+      // Remove ingredient usages in etapas by matching _id if present, otherwise by name+unidad
+      setProcesos(prev => prev.map(p => ({
+        ...p,
+        ingredientesUsados: Array.isArray(p.ingredientesUsados)
+          ? p.ingredientesUsados.filter(iu => {
+              if (ingEntry._id && iu._id) return iu._id !== ingEntry._id;
+              const iuName = String(iu.nombre || '').trim();
+              const iuUnidad = String(iu.unidad || '').trim();
+              return !(iuName === ingName && iuUnidad === ingUnidad);
+            })
+          : []
+      })));
+    }
   };
 
   const saveIngrediente = (categoriaIndex, ingredientIndex) => {
@@ -188,6 +209,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     }
 
     const toSave = {
+      _id: `${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
       nombre: n,
       cantidad: Number(ing.cantidad) || 0,
       unidad: ing.unidad || 'gr',
@@ -195,11 +217,37 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       tiempoCoccion: Number(ing.tiempoCoccion) || 0,
     };
 
+    // helper: normalize unit and convert to grams when possible
+    const toGrams = (cantidad, unidad) => {
+      const u = String((unidad || '')).trim().toLowerCase();
+      const c = Number(cantidad) || 0;
+      if (u === 'gr' || u === 'g') return c;
+      if (u === 'kg') return c * 1000;
+      return null; // not convertible
+    };
+
     // ensure total used in procesos doesn't exceed this quantity
     const usedAcrossProcesos = procesos.reduce((acc, p) => {
-      const used = (p.ingredientesUsados || [])
-        .filter(iu => iu.nombre === toSave.nombre)
-        .reduce((s, iu) => s + (Number(iu.cantidad) || 0), 0);
+      const used = (p.ingredientesUsados || []).reduce((s, iu) => {
+        const iuName = String(iu.nombre || '').trim().toLowerCase();
+        const iuUnit = String(iu.unidad || '').trim().toLowerCase();
+        const toName = String(toSave.nombre || '').trim().toLowerCase();
+        const toUnit = String(toSave.unidad || '').trim().toLowerCase();
+
+        const sameById = iu._id && toSave._id && iu._id === toSave._id;
+        const sameByNameUnit = iuName === toName && iuUnit === toUnit;
+
+        if (sameById || sameByNameUnit) {
+          return s + (Number(iu.cantidad) || 0);
+        }
+        // additionally, match by gram-equivalence if both convertible
+        const iuGr = toGrams(iu.cantidad, iu.unidad);
+        const toGr = toGrams(toSave.cantidad, toSave.unidad);
+        if (iuName === toName && iuGr !== null && toGr !== null && iuGr === toGr) {
+          return s + (Number(iu.cantidad) || 0);
+        }
+        return s;
+      }, 0);
       return acc + used;
     }, 0);
 
@@ -209,12 +257,48 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     }
 
     setSavedIngredientes(prev => {
-      const idx = prev.findIndex(x => x.nombre === toSave.nombre);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = { ...copy[idx], ...toSave };
-        return copy;
+      // helper to convert to grams
+      const toGramsLocal = (cantidad, unidad) => {
+        const u = String((unidad || '')).trim().toLowerCase();
+        const c = Number(cantidad) || 0;
+        if (u === 'gr' || u === 'g') return c;
+        if (u === 'kg') return c * 1000;
+        return null;
+      };
+
+      const toGr = toGramsLocal(toSave.cantidad, toSave.unidad);
+      const nameNorm = String(toSave.nombre || '').trim().toLowerCase();
+
+      for (let i = 0; i < prev.length; i++) {
+        const ex = prev[i];
+        const exName = String(ex.nombre || '').trim().toLowerCase();
+        const exUnit = String(ex.unidad || '').trim().toLowerCase();
+
+        if (exName !== nameNorm) continue;
+
+        // same unit -> update
+        if (exUnit === String(toSave.unidad || '').trim().toLowerCase()) {
+          const copy = [...prev];
+          copy[i] = { ...ex, ...toSave };
+          return copy;
+        }
+
+        // both convertible to grams and equal -> offer to update existing entry
+        const exGr = toGramsLocal(ex.cantidad, ex.unidad);
+        if (toGr !== null && exGr !== null && toGr === exGr) {
+          const msg = `Ya existe "${ex.nombre}" con ${ex.cantidad}${ex.unidad}. ¿Deseas actualizar esa entrada con ${toSave.cantidad}${toSave.unidad}?`;
+          const accept = window.confirm(msg);
+          if (accept) {
+            const copy = [...prev];
+            // preserve existing _id so references remain, update cantidad/unidad/tiempo
+            copy[i] = { ...ex, cantidad: toSave.cantidad, unidad: toSave.unidad, tiempoCoccion: toSave.tiempoCoccion };
+            return copy;
+          }
+          return prev;
+        }
       }
+
+      // otherwise add as distinct entry
       return [...prev, toSave];
     });
 
@@ -257,7 +341,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               ...p,
               ingredientesUsados: [
                 ...p.ingredientesUsados,
-                { nombre: '', cantidad: 0, unidad: 'gr', tiempoCoccion: 0, saved: false },
+                { _id: '', nombre: '', cantidad: 0, unidad: 'gr', tiempoCoccion: 0, saved: false },
               ],
             }
           : p
@@ -271,10 +355,11 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       const newVal = parseInt(value || '0', 10);
 
       // find total available for this ingredient from savedIngredientes
-      const ingredientName =
-        procesos[etapaIndex]?.ingredientesUsados?.[ingredienteIndex]?.nombre || null;
+      const iuRef = procesos[etapaIndex]?.ingredientesUsados?.[ingredienteIndex] || {};
+      const ingredientId = iuRef._id || null;
+      const ingredientName = iuRef.nombre || null;
 
-      const savedRef = savedIngredientes.find(si => si.nombre === ingredientName);
+      const savedRef = ingredientId ? savedIngredientes.find(si => si._id === ingredientId) : savedIngredientes.find(si => si.nombre === ingredientName);
       const totalAvailable = savedRef ? Number(savedRef.cantidad) || 0 : null;
 
       if (totalAvailable !== null) {
@@ -282,7 +367,8 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         let usedOther = 0;
         procesos.forEach((p, pi) => {
           p.ingredientesUsados.forEach((iu, ii) => {
-            if (iu.nombre === ingredientName) {
+            const matches = savedRef && savedRef._id ? (iu._id === savedRef._id) : (String(iu.nombre || '').trim().toLowerCase() === String(ingredientName || '').trim().toLowerCase() && String(iu.unidad || '').trim() === String(savedRef?.unidad || '').trim());
+            if (matches) {
               if (pi === etapaIndex && ii === ingredienteIndex) return; // skip current
               usedOther += Number(iu.cantidad) || 0;
             }
@@ -339,16 +425,19 @@ export function NewRecipePage({ onCancel, onSave, user }) {
             if (j !== ingredienteIndex) return ing;
 
             if (key === 'nombre') {
-              const ref = savedIngredientes.find(si => si.nombre === value);
-              if (ref) {
+              // `value` can be a saved ingrediente _id (from select) or free text name
+              const refById = savedIngredientes.find(si => si._id === value);
+              if (refById) {
                 return {
                   ...ing,
-                  nombre: ref.nombre,
-                  unidad: ref.unidad,
-                  tiempoCoccion: Number(ref.tiempoCoccion) || 0,
+                  _id: refById._id,
+                  nombre: refById.nombre,
+                  unidad: refById.unidad,
+                  tiempoCoccion: Number(refById.tiempoCoccion) || 0,
                 };
               }
-              return { ...ing, nombre: value };
+              // free text entry: clear _id so it is treated as manual
+              return { ...ing, _id: '', nombre: value };
             }
 
             return { ...ing, [key]: key === 'cantidad' || key === 'tiempoCoccion' ? parseInt(value || '0', 10) : value };
@@ -414,6 +503,36 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     setProcesos(prev => prev.map((x, i) => (i === index ? { ...x, saved: false } : x)));
   };
 
+  const addStage = () => {
+    const max = STAGES.length;
+    if (procesos.length >= max) {
+      toast.error(`Máximo ${max} etapas (A-E)`);
+      return;
+    }
+    const next = procesos.length; // 0-based
+    const etapa = STAGES[next] || `E`;
+    setProcesos(prev => [...prev, { etapa, titulo: '', descripcion: '', tiempoEstimado: 0, saved: false, ingredientesUsados: [] }]);
+    setOpenStageIndex(procesos.length); // abrir la nueva etapa
+  };
+
+  const removeStage = (index) => {
+    if ((procesos || []).length <= 1) {
+      toast.error('Debe quedar al menos 1 etapa');
+      return;
+    }
+    setProcesos(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      // Reassign letters A..E according to order
+      return next.map((p, i) => ({ ...p, etapa: STAGES[i] || p.etapa }));
+    });
+    // Adjust open index
+    setOpenStageIndex(prev => {
+      if (prev === index) return -1;
+      if (prev > index) return prev - 1;
+      return prev;
+    });
+  };
+
   // keep total tiempo synced with sum of etapas
   useEffect(() => {
     const total = procesos.reduce((s, p) => s + (Number(p.tiempoEstimado) || 0), 0);
@@ -421,22 +540,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
   }, [procesos]);
 
   // compute gramaje por porcion from savedIngredientes (convert basic units)
-  useEffect(() => {
-    const unitToGrams = (cantidad, unidad) => {
-      if (!unidad) return 0;
-      const u = unidad.toLowerCase();
-      if (u === 'kg') return (Number(cantidad) || 0) * 1000;
-      if (u === 'gr') return Number(cantidad) || 0;
-      if (u === 'lt') return (Number(cantidad) || 0) * 1000;
-      if (u === 'ml') return Number(cantidad) || 0;
-      // 'u' (units) not counted as grams
-      return 0;
-    };
-
-    const totalGrams = (savedIngredientes || []).reduce((acc, ing) => acc + unitToGrams(ing.cantidad, ing.unidad), 0);
-    const perPortion = porcion && porcion > 0 ? Math.round(totalGrams / porcion) : 0;
-    setGramajePorPorcion(perPortion);
-  }, [savedIngredientes, porcion]);
+  // removed gramaje por porcion calculation
 
 
   const addTecnica = () => {
@@ -559,7 +663,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       })),
       tecnicas: savedTecnicas.filter(t => t.nombre?.trim()),
       montaje,
-      gramajePorPorcion: Number(gramajePorPorcion) || 0,
     };
 
     try {
@@ -597,7 +700,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       ['Nombre', nombre],
       ['Categoría', categoria],
       ['Porciones', String(porcion)],
-      ['Gramaje por porción (g)', String(gramajePorPorcion)],
       ['Tiempo (min)', String(tiempo)],
     ];
 
@@ -796,23 +898,11 @@ export function NewRecipePage({ onCancel, onSave, user }) {
             </div>
 
             <div>
-              <label className="block mb-1">Gramaje por porción (g)</label>
-              <Input
-                type="number"
-                step={1}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                min={0}
-                value={gramajePorPorcion}
-                disabled
-                onKeyDown={preventDecimalKey}
-                onPaste={preventDecimalPaste}
-                className={inputClass}
-              />
+              {/* Gramaje por porción removed */}
             </div>
 
             <div className="col-span-3">
-              <label className="block mb-1">Tarea de Inicio (M.e.P.)</label>
+              <label className="block mb-1">Descripción</label>
               <Textarea
                 rows={3}
                 value={tareaInicio}
@@ -948,7 +1038,14 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         {/* Etapas */}
         <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
           <CardHeader>
-            <CardTitle>Etapas</CardTitle>
+            <div className="w-full flex items-center justify-between">
+              <CardTitle>Etapas</CardTitle>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="secondary" onClick={addStage} disabled={procesos.length >= STAGES.length}>
+                  Agregar Etapa
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-8">
             {errors.procesos && (
@@ -970,10 +1067,19 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                     </Button>
                     <Button
                       size="sm"
+                      variant="destructive"
+                      onClick={() => removeStage(pi)}
+                      title="Eliminar etapa"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => setOpenStageIndex(openStageIndex === pi ? -1 : pi)}
+                      title={openStageIndex === pi ? 'Cerrar' : 'Expandir'}
                     >
-                      {openStageIndex === pi ? 'Cerrar' : 'Expandir'}
+                      <ChevronDown className={`w-4 h-4 transition-transform ${openStageIndex === pi ? 'rotate-180' : 'rotate-0'}`} />
                     </Button>
                   </div>
                 </div>
@@ -1060,14 +1166,14 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                               {savedIngredientes.length > 0 ? (
                               <select
                                 className={selectClass}
-                                value={iu.nombre}
+                                value={iu._id || ''}
                                 onChange={e => updateIngredienteEtapa(pi, ii, 'nombre', e.target.value)}
                                 disabled={!!iu.saved || !!p.saved}
                               >
                                 <option value="">Seleccionar...</option>
-                                {savedIngredientes.map((ing, idx) => (
-                                  <option key={idx} value={ing.nombre}>
-                                    {ing.nombre} ({ing.categoria})
+                                {savedIngredientes.map((ing) => (
+                                  <option key={ing._id} value={ing._id}>
+                                    {ing.nombre} — {ing.cantidad}{ing.unidad}
                                   </option>
                                 ))}
                               </select>

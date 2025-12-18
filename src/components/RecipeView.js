@@ -203,7 +203,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
               className="text-lg py-5 text-slate-900 dark:text-slate-100 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
             >
               <ChefHat className="w-6 h-6 mr-2" />
-              Proceso
+              General
             </TabsTrigger>
             <TabsTrigger
               value="etapa"
@@ -261,7 +261,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             {/* Tarea de Inicio */}
             <Card className="border-l-8 border-l-green-500 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
               <CardHeader className="bg-green-50 dark:bg-green-950/30 pb-6 transition-colors duration-500">
-                <CardTitle className="text-2xl">📋 Tarea de Inicio (M.e.P.)</CardTitle>
+                <CardTitle className="text-2xl">Descripción</CardTitle>
               </CardHeader>
               <CardContent className="pt-6 pb-6">
                 <p className="text-xl leading-relaxed">{recipe.tareaInicio}</p>
@@ -275,7 +275,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
           <TabsContent value="etapa" className="space-y-6">
             <Card className="border-l-8 border-l-yellow-400 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
               <CardHeader className="bg-yellow-50 dark:bg-yellow-950/20 pb-6 transition-colors duration-500">
-                <CardTitle className="text-2xl">🗂️ Todas las Etapas</CardTitle>
+                <CardTitle className="text-2xl">Etapas</CardTitle>
               </CardHeader>
               <CardContent className="pt-6 pb-6">
                 {Array.isArray(recipe.procesos) && recipe.procesos.length > 0 ? (
@@ -347,9 +347,6 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                           </TableRow>
                         ))}
                         <TableRow className="bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 transition-colors duration-500">
-                          <TableCell colSpan={3} className="text-xl py-5">
-                            Subtotal {categoria.categoria}
-                          </TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>

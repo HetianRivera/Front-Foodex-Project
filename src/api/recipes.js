@@ -160,7 +160,38 @@ export async function getRecipe(id) {
 
 export async function listRecipes(params = {}) {
   const data = await tryRequestSingle('get', '', params);
-  return Array.isArray(data) ? data : (data?.results || []);
+  const raw = Array.isArray(data) ? data : (data?.results || []);
+
+  // Si el endpoint devuelve la estructura "RecetaCompleta" dentro de cada elemento
+  // (campo `receta` con objetos relacionados), aplanar para que la UI reciba
+  // objetos con los campos esperados (`id_receta`, `nombre`, `codigo`, `ingredientes`, `procesos`, ...)
+  const mapped = raw.map(item => {
+    if (!item) return item;
+    // Si ya viene plano, no modificar
+    if (!item.receta) return item;
+
+    const recetaObj = { ...(item.receta || {}) };
+    // Intentar obtener id_receta preferentemente
+    recetaObj.id_receta = recetaObj.id_receta ?? recetaObj.id ?? (
+      (item.receta_etapas && item.receta_etapas[0] && item.receta_etapas[0].id_receta) ||
+      (item.receta_ingredientes && item.receta_ingredientes[0] && item.receta_ingredientes[0].id_receta) ||
+      null
+    );
+    // Normalizar nombres usados en la UI
+    recetaObj.nombre = recetaObj.nombre_receta ?? recetaObj.nombre ?? recetaObj.title ?? recetaObj.nombre_receta;
+    recetaObj.codigo = recetaObj.codigo_receta ?? recetaObj.codigo ?? recetaObj.code ?? null;
+    recetaObj.anio = recetaObj.anio ?? recetaObj.year ?? null;
+
+    // Agregar relaciones directamente en la receta para la UI
+    recetaObj.ingredientes = item.ingredientes ?? item.receta_ingredientes ?? [];
+    recetaObj.procesos = item.etapas ?? item.receta_etapas ?? item.procesos ?? [];
+    recetaObj.tecnicas = item.tecnicas ?? item.tecnica ?? [];
+    recetaObj.etapa_ingredientes = item.etapa_ingredientes ?? [];
+
+    return recetaObj;
+  });
+
+  return mapped;
 }
 
 export async function updateRecipe(id, patch) {
