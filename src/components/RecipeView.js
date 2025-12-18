@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { getFullRecipe } from '../api/recipes';
 import { FullScreenLoader } from './FullScreenLoader';
 import { toast } from 'sonner';
+import { api } from '../api/client';
 
 export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
   const [recipe, setRecipe] = useState(null);
@@ -36,8 +37,6 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
       rendimiento: data.rendimiento ?? null,
       aporte: data.aporte ?? null,
       montaje: data.detalle_montaje ?? data.montaje ?? data.detalle_montaje ?? '',
-      tareaInicio: data.tareaInicio ?? data.tarea_inicio ?? data.tareaInicio ?? '',
-      argumentacionComercial: data.argumentacionComercial ?? data.argumentacion_comercial ?? data.argumentacionComercial ?? '',
       procesos: [],
       ingredientes: Array.isArray(data.ingredientes) ? data.ingredientes : (Array.isArray(data.receta_ingredientes) ? data.receta_ingredientes : []),
       tecnicas: Array.isArray(data.tecnicas) ? data.tecnicas : (Array.isArray(data.tecnica) ? data.tecnica : []),
@@ -104,6 +103,22 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
         const norm = normalize(data);
         console.debug('[RecipeView] normalized:', norm);
         setRecipe(norm);
+        // Si no hay técnicas en la respuesta, intentar obtenerlas desde el endpoint global de técnicas
+        try {
+          if (!Array.isArray(norm.tecnicas) || norm.tecnicas.length === 0) {
+            const resp = await api.get('/api/v1/tecnicas/');
+            const list = Array.isArray(resp.data) ? resp.data : (resp.data?.results || []);
+            const normalized = list.map(t => ({
+              nombre: t?.nombre_tecnica ?? t?.nombre ?? t?.titulo ?? t?.name ?? '',
+              descripcion: t?.descripcion ?? t?.descripcion_tecnica ?? t?.detalle ?? '',
+              ...t,
+            }));
+            setRecipe(prev => prev ? { ...prev, tecnicas: normalized } : { ...norm, tecnicas: normalized });
+          }
+        } catch (e) {
+          console.debug('[RecipeView] no se pudieron cargar técnicas globales:', e);
+        }
+       
       } catch (err) {
         console.error('[RecipeView] getFullRecipe error:', err);
         // Si falla (404 o similar), intentar buscar en `recipes` prop como fallback
@@ -183,12 +198,12 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             >
               <ArrowLeft className="w-7 h-7" />
             </Button>
-            <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3 mb-1 flex-wrap">
                 <h2 className="text-2xl truncate">{recipe.nombre}</h2>
                 <Badge variant="secondary" className="text-base px-3 py-1 flex-shrink-0">{recipe.codigo}</Badge>
               </div>
-              <p className="text-slate-300 text-lg">{recipe.categoria}</p>
+              <p className="text-slate-300 text-lg">{typeof recipe.categoria === 'object' ? (recipe.categoria?.nombre || recipe.categoria?.nombre_categoria || JSON.stringify(recipe.categoria)) : (recipe.categoria ?? '')}</p>
             </div>
           </div>
         </div>
@@ -240,12 +255,18 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             {/* Info Card */}
             <Card className="bg-blue-50 border-blue-200 border-2 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
               <CardContent className="pt-8 pb-8">
-                <div className="grid grid-cols-2 gap-6 text-center">
+                <div className="grid grid-cols-3 gap-6 text-center">
                   <div>
                     <p className="text-base text-slate-600 dark:text-slate-300 mb-2">Tiempo Total</p>
                     <div className="flex items-center justify-center gap-2">
                       <Clock className="w-7 h-7 text-blue-600 dark:text-blue-400" />
                       <p className="text-3xl">{formatDuration(recipe.tiempo)}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-base text-slate-600 dark:text-slate-300 mb-2">Porciones</p>
+                    <div className="flex items-center justify-center gap-2">
+                      <p className="text-3xl">{recipe.porcion ?? recipe.porciones ?? recipe.rendimiento ?? 0}</p>
                     </div>
                   </div>
                   <div>
@@ -256,7 +277,17 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
               </CardContent>
             </Card>
 
-            {/* Tarea de Inicio */}
+              {/* Categoria - muestra la categoría de la receta */}
+              <Card className="border-l-8 border-l-indigo-500 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
+                <CardHeader className="bg-indigo-50 dark:bg-indigo-950/20 pb-4 transition-colors duration-500">
+                  <CardTitle className="text-2xl">Categoría</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4 pb-4">
+                  <p className="text-lg text-slate-700 dark:text-slate-300">{typeof recipe.categoria === 'object' ? (recipe.categoria?.nombre || recipe.categoria?.nombre_categoria || JSON.stringify(recipe.categoria)) : (recipe.categoria ?? '')}</p>
+                </CardContent>
+              </Card>
+
+              {/* Tarea de Inicio */}
 
             {/* Tarea de Inicio */}
             <Card className="border-l-8 border-l-green-500 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500">
@@ -264,7 +295,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                 <CardTitle className="text-2xl">Descripción</CardTitle>
               </CardHeader>
               <CardContent className="pt-6 pb-6">
-                <p className="text-xl leading-relaxed">{recipe.tareaInicio}</p>
+                <p className="text-xl leading-relaxed">{recipe.descripcion_receta ?? recipe.descripcion ?? recipe.montaje ?? recipe.tareaInicio ?? ''}</p>
               </CardContent>
             </Card>
 
@@ -398,7 +429,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
               className="border-l-8 border-l-green-500 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500"
             >
               <CardHeader className="bg-green-50 dark:bg-green-950/30 pb-6 transition-colors duration-500">
-                <CardTitle className="text-3xl">🍽️ Instrucciones de Montaje</CardTitle>
+                <CardTitle className="text-3xl">Instrucciones de Montaje</CardTitle>
               </CardHeader>
               <CardContent className="pt-8 pb-8">
                 <div className="bg-white dark:bg-slate-950 p-8 rounded-xl border-2 border-green-200 dark:border-green-800/50 transition-colors duration-500">

@@ -5,7 +5,6 @@ import { Dashboard } from "./components/Dashboard";
 import { RecipeView } from "./components/RecipeView";
 import { NewRecipePage } from "./components/NewRecipePage";
 import { toast } from "sonner";
-import HealthCheck from "./components/HealthCheck";
 import { clearAuth, getStoredSession } from "./api/auth";
 import { listRecipes, listUserRecipes } from "./api/recipes";
 
@@ -165,7 +164,25 @@ export default function App() {
   };
 
   const handleAddRecipe = (newRecipe) => {
-    setRecipes((prev) => [{ ...newRecipe }, ...prev]);
+    // Normalizar respuesta del API (puede venir anidada en { receta, ... })
+    const normalize = (item) => {
+      if (!item) return item;
+      const src = item.receta ? { ...(item.receta || {}), ...item } : { ...item };
+      const obj = { ...src };
+      obj.id_receta = obj.id_receta ?? obj.id ?? (item.receta && item.receta.id_receta) ?? null;
+      obj.nombre = obj.nombre_receta ?? obj.nombre ?? obj.title ?? obj.nombre_receta;
+      obj.codigo = obj.codigo_receta ?? obj.codigo ?? obj.code ?? null;
+      obj.ingredientes = item.ingredientes ?? item.receta_ingredientes ?? obj.ingredientes ?? [];
+      obj.procesos = item.etapas ?? item.receta_etapas ?? item.procesos ?? obj.procesos ?? [];
+      obj.tecnicas = item.tecnicas ?? item.tecnica ?? obj.tecnicas ?? [];
+      // Asegurar que tanto `id` como `id_receta` estén disponibles en el objeto
+      if (!obj.id && obj.id_receta) obj.id = obj.id_receta;
+      if (!obj.id_receta && obj.id) obj.id_receta = obj.id;
+      return obj;
+    };
+
+    const normalized = normalize(newRecipe);
+    setRecipes((prev) => [{ ...normalized }, ...prev]);
   };
 
   const handleStartNewRecipe = () => {
@@ -178,15 +195,7 @@ export default function App() {
   };
 
   if (!user) {
-    return (
-      <>
-        <LoginPage onLogin={handleLogin} />
-        <div className="p-4">
-          <h2 className="text-lg font-semibold mb-2">Health Check (opcional)</h2>
-          <HealthCheck />
-        </div>
-      </>
-    );
+    return <LoginPage onLogin={handleLogin} />;
   }
 
   if (selectedRecipeId) {

@@ -50,7 +50,7 @@ async function tryRequestSingle(method, path = '', dataOrConfig) {
 }
 
 // Construye el objeto RecetaCompleta esperado por el endpoint robusto.
-export function toBackendRecetaCompletaPayload(recipe) {
+export async function toBackendRecetaCompletaPayload(recipe) {
   const userId = getUserId();
   if (!userId) throw new Error('No se pudo determinar id_usuario (no hay sesión)');
 
@@ -63,6 +63,9 @@ export function toBackendRecetaCompletaPayload(recipe) {
     codigo_receta: (recipe?.codigo || recipe?.code) ? String(recipe.codigo || recipe.code).trim() : null,
     anio: recipe?.anio ? Number(recipe.anio) : getAnioYear(),
     detalle_montaje: recipe?.montaje || recipe?.detalle_montaje || null,
+    descripcion_receta: recipe?.descripcion_receta || recipe?.descripcion || recipe?.descripcion || null,
+    categoria: recipe?.categoria ?? recipe?.category ?? null,
+    porciones: recipe?.porciones ?? recipe?.porcion ?? recipe?.rendimiento ?? null,
     estado: recipe?.estado !== undefined ? !!recipe.estado : true,
     id_usuario: userId,
     id_semestre: lsSemestre ?? getIntEnvOr('REACT_APP_SEMESTRE_ID', 1),
@@ -82,33 +85,52 @@ export function toBackendRecetaCompletaPayload(recipe) {
         if (!nombre) continue; // evitar enviar ingredientes sin nombre
         const id_unidad = ing?.id_unidad ?? ing?.unidad_id ?? defaultUnidad;
         const id_categoria = ing?.id_categoria ?? ing?.categoria_id ?? catIdFromCat ?? defaultCategoriaId;
-        ingredientes.push({ nombre, id_unidad: Number(id_unidad) || defaultUnidad, id_categoria: Number(id_categoria) || defaultCategoriaId });
+        const cantidadVal = Number(ing?.cantidad) || null;
+        ingredientes.push({ nombre, cantidad: cantidadVal, cantidad_ingrediente: cantidadVal, id_unidad: Number(id_unidad) || defaultUnidad, id_categoria: Number(id_categoria) || defaultCategoriaId });
       }
     }
   }
 
-  const categorias_ingrediente = Array.isArray(recipe?.categoria_ingrediente)
-    ? recipe.categoria_ingrediente.map(ci => ({ id_ingrediente: ci.id_ingrediente ?? null, id_categoria: ci.id_categoria ?? null }))
-    : [];
+  // Construir categoria_ingrediente: incluir las 5 categorías principales del formulario
+  const UI_CATEGORIES = ['Cárnicos', 'Verduras', 'Ovolácteos', 'Abarrotes', 'Licores'];
+  const categorias_ingrediente = [];
+  try {
+    const catMap = await prefetchCategorias();
+    // Añadir entradas para las 5 categorías principales (si existen en el sistema)
+    for (const cname of UI_CATEGORIES) {
+      const id_categoria = catMap[String(cname).toLowerCase()] ?? null;
+      categorias_ingrediente.push({ id_ingrediente: null, id_categoria: id_categoria });
+    }
+  } catch (e) {
+    // fallback: mantener vacío
+  }
 
-  const receta_ingredientes = Array.isArray(recipe?.receta_ingredientes)
+  let receta_ingredientes = Array.isArray(recipe?.receta_ingredientes)
     ? recipe.receta_ingredientes.map(ri => ({ id_receta: ri.id_receta ?? null, id_ingrediente: ri.id_ingrediente ?? null, id_receta_ingrediente: ri.id_receta_ingrediente ?? null }))
     : [];
 
   const mapEtapa = (e, idx) => ({
     id_etapa: e?.id_etapa ?? genRecetaEtapaId(0, idx + 1),
-    nombre_etapa: (e?.nombre_etapa || e?.nombre || e?.title || '').toString().trim(),
-    tiempo_minutos: e?.tiempo_minutos ?? e?.tiempo ?? null
+    nombre_etapa: (e?.nombre_etapa || e?.nombre || e?.title || e?.titulo || '').toString().trim(),
+    tiempo_minutos: e?.tiempo_minutos ?? e?.tiempo ?? e?.tiempoEstimado ?? null,
+    descripcion: e?.descripcion ?? e?.instruccion_etapa ?? e?.instruccion ?? null,
+    instruccion_etapa: e?.instruccion_etapa ?? e?.instruccion ?? e?.descripcion ?? null,
   });
-  const etapas = Array.isArray(recipe?.etapas) ? recipe.etapas.map(mapEtapa) : [];
+  // Aceptar `etapas` o su sinónimo `procesos` desde la UI (NewRecipePage usa `procesos`)
+  const etapasSource = Array.isArray(recipe?.etapas)
+    ? recipe.etapas
+    : Array.isArray(recipe?.procesos)
+    ? recipe.procesos
+    : [];
+  const etapas = etapasSource.map(mapEtapa);
 
   const receta_etapas = Array.isArray(recipe?.receta_etapas)
     ? recipe.receta_etapas.map((re, idx) => ({
         fase_etapa: re.fase_etapa ?? null,
         instruccion_etapa: re.instruccion_etapa ?? null,
-        id_receta: re.id_receta ?? null,
+        id_receta: re.id_receta ?? (recipe?.id_receta ?? recipe?.id ?? null),
         id_etapa: re.id_etapa ?? (etapas[idx]?.id_etapa ?? null),
-        id_receta_etapa: re.id_receta_etapa ?? genRecetaEtapaId(0, idx + 1)
+        id_receta_etapa: re.id_receta_etapa ?? genRecetaEtapaId(recipe?.id_receta ?? recipe?.id ?? 0, idx + 1)
       }))
     : [];
 
@@ -129,11 +151,42 @@ export function toBackendRecetaCompletaPayload(recipe) {
     })));
   }
 
-  const tecnicas = Array.isArray(recipe?.tecnicas) ? recipe.tecnicas.map(t => ({ nombre_tecnica: t.nombre_tecnica || t.nombre || t.name || '', descripcion: t.descripcion || null })) : [];
+  // Mapear técnicas asegurando nombres en varios formatos para compatibilidad con APIs distintas
+  const tecnicas = Array.isArray(recipe?.tecnicas)
+    ? recipe.tecnicas.map(t => ({
+        nombre_tecnica: t.nombre_tecnica || t.nombre || t.name || '',
+        nombre: t.nombre || t.nombre_tecnica || t.name || '',
+        descripcion: t.descripcion ?? t.descripcion_tecnica ?? null,
+      }))
+    : [];
 
-  const ingrediente_tecnica = Array.isArray(recipe?.ingrediente_tecnica)
+  // ingrediente_tecnica: si viene, respetar; si no, intentar construir a partir de ids disponibles
+  let ingrediente_tecnica = Array.isArray(recipe?.ingrediente_tecnica)
     ? recipe.ingrediente_tecnica.map(it => ({ id_ingrediente: it.id_ingrediente ?? null, id_tecnica: it.id_tecnica ?? null, id_ingrediente_tecnica: it.id_ingrediente_tecnica ?? null }))
     : [];
+
+  // Construir receta_ingredientes a partir de ingredientes por categoría si no viene
+  if ((!(Array.isArray(recipe?.receta_ingredientes) && recipe.receta_ingredientes.length > 0)) && Array.isArray(recipe?.ingredientes)) {
+    for (const cat of recipe.ingredientes) {
+      for (const ing of (cat?.ingredientes || [])) {
+        const id_ing = ing?.id_ingrediente ?? ing?._id ?? ing?.id ?? null;
+        const cantidad = ing?.cantidad ?? ing?.cantidad_ingrediente ?? null;
+        receta_ingredientes.push({ id_receta: recipe?.id_receta ?? recipe?.id ?? null, id_ingrediente: id_ing, cantidad_ingrediente: cantidad, id_receta_ingrediente: genRecetaIngredienteId(recipe?.id_receta ?? recipe?.id ?? 0, id_ing ?? 0) });
+      }
+    }
+  }
+
+  // If not provided, try to auto-create ingrediente_tecnica links when both ingredient and tecnica ids are present
+  if ((!ingrediente_tecnica || ingrediente_tecnica.length === 0) && Array.isArray(recipe?.tecnicas) && Array.isArray(recipe?.ingredientes)) {
+    const tecnicaIds = recipe.tecnicas.map(t => t?.id_tecnica ?? t?.id ?? null).filter(Boolean);
+    const flatIngs = recipe.ingredientes.flatMap(cat => (cat?.ingredientes || []));
+    const ingIds = flatIngs.map(i => i?.id_ingrediente ?? i?._id ?? i?.id ?? null).filter(Boolean);
+    for (const ii of ingIds) {
+      for (const tid of tecnicaIds) {
+        ingrediente_tecnica.push({ id_ingrediente: ii, id_tecnica: tid, id_ingrediente_tecnica: genIngredienteTecnicaId(ii, tid) });
+      }
+    }
+  }
 
   return {
     receta,
@@ -149,7 +202,7 @@ export function toBackendRecetaCompletaPayload(recipe) {
 }
 
 export async function createRecipe(recipe) {
-  const payload = toBackendRecetaCompletaPayload(recipe);
+  const payload = await toBackendRecetaCompletaPayload(recipe);
   return tryRequestSingle('post', '', payload);
 }
 
@@ -375,15 +428,103 @@ function filterListByKeys(list, keys, value) {
 // `procesos` como array de etapas con `ingredientesUsados`, `tecnicas`, etc.).
 export async function getFullRecipe(recetaId) {
   if (!recetaId) throw new Error('recetaId requerido');
-  const base = await getRecipe(recetaId).catch(() => null);
+  // 1) Intentar obtener TODO desde el endpoint robusto y mapear a formato UI.
+  const base = await getRecipe(recetaId).catch(async (err) => {
+    if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+      console.debug('[getFullRecipe] robust GET failed for id=', recetaId, err?.response?.status);
+    }
+    return null;
+  });
+  if (base) {
+    // Detectar si el endpoint robusto ya incluye relaciones
+    const hasRelations =
+      (Array.isArray(base.ingredientes) && base.ingredientes.length > 0) ||
+      (Array.isArray(base.receta_ingredientes) && base.receta_ingredientes.length > 0) ||
+      (Array.isArray(base.etapas) && base.etapas.length > 0) ||
+      (Array.isArray(base.receta_etapas) && base.receta_etapas.length > 0) ||
+      (Array.isArray(base.tecnicas) && base.tecnicas.length > 0) ||
+      (Array.isArray(base.tecnica) && base.tecnica.length > 0);
+
+    if (hasRelations) {
+      const item = base.receta ? { ...(base.receta || {}), ...base } : { ...base };
+      const mapped = { ...item };
+      mapped.id_receta = mapped.id_receta ?? mapped.id ?? null;
+      mapped.nombre = mapped.nombre_receta ?? mapped.nombre ?? mapped.title ?? '';
+      mapped.codigo = mapped.codigo_receta ?? mapped.codigo ?? mapped.code ?? null;
+      mapped.anio = mapped.anio ?? mapped.year ?? null;
+      // Nuevos campos del endpoint robusto
+      mapped.descripcion_receta = mapped.descripcion_receta ?? mapped.descripcion ?? mapped.detalle_montaje ?? mapped.montaje ?? null;
+      mapped.categoria = mapped.categoria ?? mapped.categoria ?? null;
+      mapped.porcion = mapped.porciones ?? mapped.porcion ?? mapped.rendimiento ?? mapped.porcion ?? null;
+      // Mantener compatibilidad con campos de UI
+      mapped.montaje = mapped.montaje ?? mapped.detalle_montaje ?? mapped.descripcion_receta ?? mapped.montaje;
+
+      mapped.ingredientes = base.ingredientes ?? base.receta_ingredientes ?? mapped.ingredientes ?? [];
+      mapped.procesos = base.etapas ?? base.receta_etapas ?? base.procesos ?? mapped.procesos ?? [];
+      mapped.tecnicas = base.tecnicas ?? base.tecnica ?? mapped.tecnicas ?? [];
+      mapped.etapa_ingredientes = base.etapa_ingredientes ?? mapped.etapa_ingredientes ?? [];
+
+      return mapped;
+    }
+  }
+  // Si no encontramos detalle robusto, intentar localizar la receta usando listRecipes
+  if (!base) {
+    try {
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+        console.debug('[getFullRecipe] robust GET returned null — trying listRecipes fallbacks for id=', recetaId);
+      }
+      const paramsCandidates = [
+        { id_receta: recetaId },
+        { id: recetaId },
+        { receta: recetaId },
+        { receta_id: recetaId },
+        { codigo_receta: recetaId },
+        { codigo: recetaId },
+      ];
+      for (const p of paramsCandidates) {
+        try {
+          const list = await listRecipes(p);
+          if (Array.isArray(list) && list.length > 0) {
+            // Prefer exact id match
+            const found = list.find(it => String(it.id_receta || it.id) === String(recetaId) || String(it.codigo || it.codigo_receta) === String(recetaId)) || list[0];
+            if (found) {
+              if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+                console.debug('[getFullRecipe] found via listRecipes:', p, found);
+              }
+              // map to same format as a robust base would
+              const mapped = found.receta ? { ...(found.receta || {}), ...found } : { ...found };
+              mapped.id_receta = mapped.id_receta ?? mapped.id ?? null;
+              mapped.nombre = mapped.nombre_receta ?? mapped.nombre ?? mapped.title ?? '';
+              mapped.codigo = mapped.codigo_receta ?? mapped.codigo ?? mapped.code ?? null;
+              mapped.anio = mapped.anio ?? mapped.year ?? null;
+              mapped.descripcion_receta = mapped.descripcion_receta ?? mapped.descripcion ?? mapped.detalle_montaje ?? mapped.montaje ?? null;
+              mapped.categoria = mapped.categoria ?? mapped.categoria ?? null;
+              mapped.porcion = mapped.porciones ?? mapped.porcion ?? mapped.rendimiento ?? mapped.porcion ?? null;
+              mapped.montaje = mapped.montaje ?? mapped.detalle_montaje ?? mapped.descripcion_receta ?? mapped.montaje;
+              mapped.ingredientes = found.ingredientes ?? found.receta_ingredientes ?? [];
+              mapped.procesos = found.etapas ?? found.receta_etapas ?? found.procesos ?? [];
+              mapped.tecnicas = found.tecnicas ?? found.tecnica ?? [];
+              mapped.etapa_ingredientes = found.etapa_ingredientes ?? [];
+              return mapped;
+            }
+          }
+        } catch (e) {
+          // continue to next candidate
+        }
+      }
+    } catch (e) {
+      if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') console.debug('[getFullRecipe] listRecipes fallback failed', e);
+    }
+  }
+
+  // 2) Fallback: si el endpoint robusto no devuelve relaciones, consultar endpoints relacionados
   const result = base ? { ...base } : { id_receta: recetaId };
 
-  // 1) receta-ingredientes -> ingredientes (detallados)
+  // receta-ingredientes -> ingredientes (detallados)
   let recetaIngs = [];
   try {
     const data = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaIngredientes, recetaId);
     recetaIngs = Array.isArray(data) ? data : (data?.results || []);
-    // Filtrar solo los enlaces que pertenezcan a esta receta
     recetaIngs = filterListByKeys(recetaIngs, ['id_receta','receta','receta_id','id_receta_id','id_receta_ingrediente','recetaIngrediente','id_receta_ingrediente'], recetaId);
   } catch (e) {
     recetaIngs = [];
@@ -397,19 +538,19 @@ export async function getFullRecipe(recetaId) {
     if (ingId) {
       try { ingDetail = await tryFetchDetail(RELATED_ENDPOINTS.ingredientes, ingId); } catch (e) { ingDetail = null; }
     }
-    const nombre = ingDetail?.nombre || ri.nombre || ri.nombre_ingrediente || ri.nombre_ingrediente || null;
-    const cantidad = ri.cantidad_ingrediente ?? ri.cantidad ?? ri.cantidad_ingrediente ?? null;
+    const nombre = ingDetail?.nombre || ri.nombre || ri.nombre_ingrediente || null;
+    const cantidad = ri.cantidad_ingrediente ?? ri.cantidad ?? null;
     const unidad = ingDetail?.unidad || ri.unidad || null;
     const categoria = ingDetail?.categoria || ri.categoria || 'Sin categoría';
     const ingObj = { id_ingrediente: ingId, nombre, cantidad, unidad, ...(ingDetail || {}) };
-    ingredientesById[ingId] = ingObj;
+    if (ingId) ingredientesById[ingId] = ingObj;
     if (!categoriaMap[categoria]) categoriaMap[categoria] = [];
     categoriaMap[categoria].push(ingObj);
   }
 
   result.ingredientes = Object.keys(categoriaMap).map(cat => ({ categoria: cat, ingredientes: categoriaMap[cat] }));
 
-  // 2) receta-etapas -> procesos (etapas) y sus ingredientes (etapa-ingredientes)
+  // receta-etapas -> procesos (etapas) y sus ingredientes (etapa-ingredientes)
   let recetaEtapas = [];
   try {
     const data = await tryGetOverCandidates(RELATED_ENDPOINTS.recetaEtapas, recetaId);
@@ -455,16 +596,14 @@ export async function getFullRecipe(recetaId) {
   }
   result.procesos = procesos;
 
-  // 3) Técnicas: intentar ligar técnicas a partir de ingrediente-tecnica
+  // Técnicas: intentar ligar técnicas a partir de ingrediente-tecnica
   const tecnicaIds = new Set();
   try {
-    // Obtener links ingrediente-tecnica para los ingredientes de la receta
     const allIngIds = Object.keys(ingredientesById).filter(Boolean);
     for (const ingId of allIngIds) {
       try {
         const links = await tryGetOverCandidates(RELATED_ENDPOINTS.ingredienteTecnica, ingId).catch(() => []);
         const arr = Array.isArray(links) ? links : (links?.results || []);
-        // Filtrar por id_ingrediente para evitar enlaces globales
         const filtered = filterListByKeys(arr, ['id_ingrediente','ingrediente','id'], ingId);
         for (const l of filtered) {
           const tid = l.id_tecnica ?? l.tecnica ?? l.id ?? l.id_tecnica_id;
@@ -513,7 +652,13 @@ async function postOverCandidates(urls, data) {
 export async function createFullRecipe(uiRecipe) {
   // Normalizar ingredientes y construir payload completo
   try { uiRecipe = normalizeIngredientsInRecipe(uiRecipe); } catch {}
-  const payload = toBackendRecetaCompletaPayload(uiRecipe);
+  const payload = await toBackendRecetaCompletaPayload(uiRecipe);
+  // Log del payload para depuración cuando estén activadas las trazas
+  try {
+    if (String(process.env.REACT_APP_DEBUG_API || 'false').toLowerCase() === 'true') {
+      console.debug('[createFullRecipe] payload:', payload);
+    }
+  } catch (e) {}
   // Enviar todo en un solo POST al endpoint robusto
   const resp = await tryRequestSingle('post', '', payload);
   return resp;
