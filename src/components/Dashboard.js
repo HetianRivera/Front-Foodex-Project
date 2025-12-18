@@ -188,12 +188,12 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
 
       {/* Stats */}
       <div className="container mx-auto max-w-6xl p-8">
-        <div className="grid grid-cols-3 gap-6 mb-10">
+        <div className="grid grid-cols-2 gap-6 mb-10">
           <Card>
             <CardContent className="pt-8 pb-8">
-              <div className="flex items-center gap-5">
-                <div className="bg-red-100 p-4 rounded-xl">
-                  <BookOpen className="w-10 h-10 text-red-600" />
+              <div className="flex items-center gap-5 content:center justify-center">
+                <div className="bg-red-100 p-4 rounded-xl ">
+                  <BookOpen className="w-10 h-10 text-red-600 " />
 
                 </div>
 
@@ -207,23 +207,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
 
           <Card>
             <CardContent className="pt-8 pb-8">
-              <div className="flex items-center gap-5">
-                <div className="bg-blue-100 p-4 rounded-xl">
-                  <Clock className="w-10 h-10 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Tiempo Promedio</p>
-                  <p className="text-2xl">
-                    {(displayRecipes.length === 0) ? 0 : Math.round(displayRecipes.reduce((sum, r) => sum + (r.tiempo || 0), 0) / displayRecipes.length)} min
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-8 pb-8">
-              <div className="flex items-center gap-5">
+              <div className="flex items-center gap-5 justify-center">
                 <div className="bg-green-100 p-4 rounded-xl">
                   <Users className="w-10 h-10 text-green-600" />
                 </div>
@@ -231,6 +215,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   <p className="text-lg text-slate-600 mb-1 dark:text-slate-200 transition-colors duration-300 ease-in-out">Rol Actual</p>
                   <p className="text-2xl">{(user.role || '').toLowerCase().includes('profesor') ? 'Profesor' : 'Alumno'}</p>
                 </div>
+                
               </div>
             </CardContent>
           </Card>
