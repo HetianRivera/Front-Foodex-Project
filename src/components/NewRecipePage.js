@@ -19,10 +19,12 @@ import {
   linkIngredienteTecnica,
   linkCategoriaIngrediente,
 } from '../api/recipes';
+import { validateRecipePayload } from '../utils/validators';
 
 const CATEGORIES = ['Cárnicos', 'Verduras', 'Ovolácteos', 'Abarrotes', 'Licores'];
 const UNIDADES = ['gr', 'kg', 'ml', 'lt', 'u'];
 const STAGES = ['A', 'B', 'C', 'D', 'E'];
+const MAX_STAGE_TIME = 9999;
 
 const inputClass =
   'bg-slate-50 text-slate-900 placeholder-slate-400 ' +
@@ -38,6 +40,8 @@ const selectClass =
 
 export function NewRecipePage({ onCancel, onSave, user }) {
   const [isSaving, setIsSaving] = useState(false);
+
+  
 
   const RELAX =
     String(
@@ -63,9 +67,8 @@ export function NewRecipePage({ onCancel, onSave, user }) {
   const [errors, setErrors] = useState({});
 
   const [savedIngredientes, setSavedIngredientes] = useState([]);
-  const [tecnicas, setTecnicas] = useState([]);
+  const [tecnicas, setTecnicas] = useState([{ nombre: '', descripcion: '', saved: false }]);
   const [savedTecnicas, setSavedTecnicas] = useState([]);
-
   const [ingredientesCategorias, setIngredientesCategorias] = useState(
     CATEGORIES.map(c => ({ categoria: c, ingredientes: [] }))
   );
@@ -542,7 +545,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
   // compute gramaje por porcion from savedIngredientes (convert basic units)
   // removed gramaje por porcion calculation
 
-
   const addTecnica = () => {
     setTecnicas(prev => {
       if (prev.length >= 1) {
@@ -585,6 +587,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
   };
 
   const handleSave = async () => {
+    
     // Validación: etapas A-E únicas
     const STAGE_SET = new Set(['A', 'B', 'C', 'D', 'E']);
     const phases = procesos.map(p => String(p.etapa || '').trim().toUpperCase());
@@ -620,6 +623,12 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       if (!procesos.some(p => p.titulo.trim() && p.descripcion.trim() && p.tiempoEstimado))
         newErrors.procesos =
           'Debes completar al menos una etapa con título, tiempo y descripción';
+
+      // Ensure no etapa exceeds max allowed time
+      const over = procesos.find(p => Number(p.tiempoEstimado) > MAX_STAGE_TIME);
+      if (over) {
+        newErrors.procesos = `La etapa ${over.etapa || '?'} tiene un tiempo mayor a ${MAX_STAGE_TIME} minutos`;
+      }
 
       setErrors(newErrors);
       if (Object.keys(newErrors).length > 0) {
@@ -666,6 +675,14 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     };
 
     try {
+      // Validate payload against global limits
+      const valErrors = validateRecipePayload(receta || {});
+      if (valErrors && valErrors.length) {
+        setErrors(prev => ({ ...prev, validation: valErrors }));
+        toast.error('No se puede guardar: hay campos que exceden los límites');
+        return;
+      }
+
       setIsSaving(true);
       const saved = await createFullRecipe(receta);
 
@@ -801,9 +818,9 @@ export function NewRecipePage({ onCancel, onSave, user }) {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out">
       <FullScreenLoader show={isSaving} />
 
-      <DashboardHeader user={user}>
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Nueva Ficha Técnica</h1>
+      <DashboardHeader user={user} showWelcome={false}>
+          <div className="flex items-center justify-between">
+          <h1 className="text-4xl font-bold">Nueva Ficha Técnica</h1>
           <div className="flex gap-2">
             <Button className={'bg-white text-black hover:bg-gray-200 hover:text-black'} variant="outline" onClick={onCancel}>
               Cancelar
@@ -820,7 +837,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         {/* Datos Generales */}
         <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
           <CardHeader>
-            <CardTitle className="text-slate-900 dark:text-slate-100">Datos Generales</CardTitle>
+            <CardTitle className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Datos Generales</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-3 gap-4">
             <div>
@@ -938,7 +955,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         {/* Ingredientes */}
         <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Ingredientes</CardTitle>
+            <CardTitle className="text-2xl font-semibold">Ingredientes</CardTitle>
           </CardHeader>
 
           <CardContent className="space-y-8">
@@ -949,7 +966,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
             {ingredientesCategorias.map((cat, ci) => (
               <div key={ci} className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xl font-semibold">{cat.categoria}</h4>
+                  <h4 className="text-base font-semibold">{cat.categoria}</h4>
                   <Button className={'dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:hover:text-black'} size="sm" variant="secondary" onClick={() => addIngredient(ci)}>
                     Agregar
                   </Button>
@@ -1039,7 +1056,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
           <CardHeader>
             <div className="w-full flex items-center justify-between">
-              <CardTitle>Etapas</CardTitle>
+              <CardTitle className="text-2xl font-semibold">Etapas</CardTitle>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="secondary" onClick={addStage} disabled={procesos.length >= STAGES.length}>
                   Agregar Etapa
@@ -1110,23 +1127,32 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                         min={0}
                         value={p.tiempoEstimado}
                         disabled={!!p.saved}
-                        onChange={e =>
+                        max={MAX_STAGE_TIME}
+                        onChange={e => {
+                          let newTiempo = parseInt(e.target.value || '0', 10);
+                          if (newTiempo > MAX_STAGE_TIME) {
+                            toast.error(`El tiempo de etapa no puede ser mayor a ${MAX_STAGE_TIME} minutos`);
+                            newTiempo = MAX_STAGE_TIME;
+                            setErrors(prev => ({ ...prev, procesos: `Tiempo de etapa no puede superar ${MAX_STAGE_TIME} minutos` }));
+                          } else {
+                            setErrors(prev => ({ ...prev, procesos: '' }));
+                          }
+
                           setProcesos(prev =>
                             prev.map((x, i) =>
-                              i === pi ? (() => {
-                                const newTiempo = parseInt(e.target.value || '0', 10);
-                                return {
-                                  ...x,
-                                  tiempoEstimado: newTiempo,
-                                  ingredientesUsados: (x.ingredientesUsados || []).map(ing => ({
-                                    ...ing,
-                                    tiempoCoccion: Math.min(Number(ing.tiempoCoccion) || 0, newTiempo)
-                                  }))
-                                };
-                              })() : x
+                              i === pi
+                                ? {
+                                    ...x,
+                                    tiempoEstimado: newTiempo,
+                                    ingredientesUsados: (x.ingredientesUsados || []).map(ing => ({
+                                      ...ing,
+                                      tiempoCoccion: Math.min(Number(ing.tiempoCoccion) || 0, newTiempo),
+                                    })),
+                                  }
+                                : x
                             )
-                          )
-                        }
+                          );
+                        }}
                         onKeyDown={preventDecimalKey}
                         onPaste={preventDecimalPaste}
                         className={inputClass}
@@ -1286,12 +1312,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         {/* Técnica */}
         <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
           <CardHeader className="flex items-center justify-between">
-            <CardTitle>Técnica Base</CardTitle>
-            {tecnicas.length === 0 && (
-              <Button size="sm" variant="secondary" onClick={addTecnica}>
-                Agregar Técnica
-              </Button>
-            )}
+            <CardTitle className="text-2xl font-semibold">Técnica Base</CardTitle>
           </CardHeader>
 
           <CardContent className="space-y-6">
@@ -1299,7 +1320,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               <div key={idx} className="space-y-4 p-4 rounded border border-slate-200 dark:border-slate-700">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block mb-1">Nombre de la Técnica</label>
+                    <label className="block mb-1">Nombre</label>
                     <Input
                       value={t.nombre}
                       onChange={e => updateTecnica(idx, 'nombre', e.target.value)}
@@ -1307,20 +1328,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                     />
                   </div>
 
-                  <div className="flex items-end justify-end gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => saveTecnica(idx)}
-                      disabled={!t.nombre.trim() || !t.descripcion.trim() || t.saved}
-                      className={'hover:bg-white dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:hover:text-black'}
-                    >
-                      Guardar
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={() => removeTecnica(idx)}>
-                      Eliminar
-                    </Button>
-                  </div>
+                  {/* controls removed: no agregar/eliminar técnica */}
 
                   <div className="col-span-2">
                     <label className="block mb-1">Descripción</label>
@@ -1345,7 +1353,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         {/* Montaje */}
         <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
           <CardHeader>
-            <CardTitle>Montaje Final</CardTitle>
+            <CardTitle className="text-2xl font-semibold">Montaje Final</CardTitle>
           </CardHeader>
           <CardContent>
             <Textarea

@@ -172,7 +172,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out">
-      <DashboardHeader user={user} onLogout={onLogout}>
+      <DashboardHeader user={user} onLogout={onLogout} showWelcome={false}>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <Button 
@@ -346,7 +346,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
                             </TableCell>
                           </TableRow>
                         ))}
-                        <TableRow className="bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 transition-colors duration-500">
+                        <TableRow className="bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 transition-colors duration-500"> 
                         </TableRow>
                       </TableBody>
                     </Table>

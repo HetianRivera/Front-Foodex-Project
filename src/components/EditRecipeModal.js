@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { validateRecipePayload } from '../utils/validators';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -10,6 +11,7 @@ import { toast } from 'sonner';
 const CATEGORIES = ['Cárnicos', 'Verduras', 'Ovolácteos', 'Abarrotes', 'Licores'];
 const UNIDADES = ['gr', 'kg', 'ml', 'lt', 'u'];
 const STAGES = ['A', 'B', 'C', 'D', 'E'];
+const MAX_STAGE_TIME = 9999;
 
 export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
   // Estado general
@@ -86,6 +88,17 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
     const newErrors = {};
     if (!formData.nombre.trim()) newErrors.nombre = 'El nombre es obligatorio';
     if (!formData.codigo.trim()) newErrors.codigo = 'El código es obligatorio';
+    // Ensure no etapa exceeds max allowed time
+    const over = procesos.find(p => Number(p.tiempoEstimado) > MAX_STAGE_TIME);
+    if (over) {
+      newErrors.procesos = `La etapa ${over.etapa || '?'} tiene un tiempo mayor a ${MAX_STAGE_TIME} minutos`;
+    }
+    // global payload validation
+    const valErrors = validateRecipePayload(formData || {});
+    if (valErrors && valErrors.length) {
+      setErrors(prev => ({ ...prev, validation: valErrors }));
+      return false;
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -133,10 +146,25 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
 
   // Funciones para procesos/etapas
   const updateProcesoField = (stageIndex, key, value) => {
+    // If updating tiempoEstimado, enforce max limit
+    if (key === 'tiempoEstimado') {
+      let v = Number(value) || 0;
+      if (v > MAX_STAGE_TIME) {
+        toast.error(`El tiempo de etapa no puede ser mayor a ${MAX_STAGE_TIME} minutos`);
+        v = MAX_STAGE_TIME;
+        setErrors(prev => ({ ...prev, procesos: `Tiempo de etapa no puede superar ${MAX_STAGE_TIME} minutos` }));
+      } else {
+        setErrors(prev => ({ ...prev, procesos: '' }));
+      }
+
+      setProcesos(prev =>
+        prev.map((p, i) => (i === stageIndex ? { ...p, tiempoEstimado: v } : p))
+      );
+      return;
+    }
+
     setProcesos(prev =>
-      prev.map((p, i) =>
-        i === stageIndex ? { ...p, [key]: value } : p
-      )
+      prev.map((p, i) => (i === stageIndex ? { ...p, [key]: value } : p))
     );
   };
 
@@ -182,7 +210,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
     e.preventDefault();
 
     if (!validateForm()) {
-      toast.error('Por favor completa todos los campos requeridos');
+      toast.error('Por favor completa todos los campos requeridos o corrige los límites');
       return;
     }
 
@@ -233,7 +261,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto dark:bg-slate-900 dark:border-slate-800">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Editar Receta</DialogTitle>
+          <DialogTitle className="text-3xl">Editar Receta</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -347,8 +375,8 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
             <TabsContent value="ingredientes" className="space-y-4">
               {ingredientesCategorias.map((cat, ci) => (
                 <div key={ci} className="space-y-3 border rounded p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-lg font-semibold">{cat.categoria}</h4>
+                    <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-base font-semibold">{cat.categoria}</h4>
                     <Button
                       type="button"
                       size="sm"
@@ -453,6 +481,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
                             inputMode="numeric"
                             pattern="[0-9]*"
                             min={0}
+                            max={MAX_STAGE_TIME}
                             value={p.tiempoEstimado}
                             onChange={e => updateProcesoField(pi, 'tiempoEstimado', parseInt(e.target.value || '0', 10))}
                             onKeyDown={preventDecimalKey}
