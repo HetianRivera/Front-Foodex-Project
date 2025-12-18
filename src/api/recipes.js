@@ -660,6 +660,36 @@ export async function createFullRecipe(uiRecipe) {
     }
   } catch (e) {}
   // Enviar todo en un solo POST al endpoint robusto
+  // Antes de enviar: si hay técnicas sin id, intentar crearlas en el endpoint de técnicas
+  try {
+    if (Array.isArray(payload.tecnicas) && payload.tecnicas.length > 0) {
+      const created = [];
+      for (const t of payload.tecnicas) {
+        const alreadyId = t?.id_tecnica ?? t?.id ?? t?.id_tecnica_id ?? null;
+        if (alreadyId) {
+          created.push(t);
+          continue;
+        }
+        const toPost = {
+          nombre_tecnica: t.nombre_tecnica || t.nombre || t.name || undefined,
+          descripcion: t.descripcion || t.descripcion_tecnica || undefined,
+        };
+        try {
+          const resp = await postOverCandidates(RELATED_ENDPOINTS.tecnicas, toPost).catch(() => null);
+          if (resp) {
+            const id = resp.id_tecnica ?? resp.id ?? resp.id_tecnica_id ?? null;
+            created.push({ ...(resp || {}), id_tecnica: id, nombre_tecnica: resp.nombre_tecnica || resp.nombre || (toPost.nombre_tecnica || undefined), descripcion: resp.descripcion || toPost.descripcion });
+            continue;
+          }
+        } catch (e) {}
+        created.push(t);
+      }
+      payload.tecnicas = created;
+    }
+  } catch (e) {
+    // no interrumpir el flujo si falla la creación previa de técnicas
+  }
+
   const resp = await tryRequestSingle('post', '', payload);
   return resp;
 }

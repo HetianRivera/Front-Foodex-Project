@@ -573,7 +573,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       const existingIdx = prev.findIndex(
         x => x.nombre.trim().toLowerCase() === t.nombre.trim().toLowerCase()
       );
-      const newEntry = { nombre: t.nombre.trim(), descripcion: t.descripcion.trim() };
+      const newEntry = { nombre: t.nombre.trim(), nombre_tecnica: t.nombre.trim(), descripcion: t.descripcion.trim() };
 
       if (existingIdx >= 0) {
         const copy = [...prev];
@@ -674,7 +674,9 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         })),
         tiempoEstimado: Number(p.tiempoEstimado) || 0,
       })),
-      tecnicas: savedTecnicas.filter(t => t.nombre?.trim()),
+      tecnicas: savedTecnicas
+        .filter(t => (t.nombre || t.nombre_tecnica || '').toString().trim())
+        .map(t => ({ nombre_tecnica: t.nombre_tecnica || t.nombre || '', descripcion: t.descripcion || '' })),
       montaje,
     };
 
