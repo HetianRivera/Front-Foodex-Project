@@ -317,11 +317,23 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
           {/* Paginador */}
           {totalPages > 1 && (
           <div className='flex item-center justify-center gap-3 mt-8'>
-            <button variant='outline' onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>Anterior</button>
-            {Array.from({ length: totalPages }).map((_, i) => (
-              <button key={i} variant={i + 1 === page ? 'secondary' : 'ghost'} onClick={() => setPage(i + 1)}>{i + 1}</button>
-            ))}
-            <button variant='outline' onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Siguiente</button>
+            <Button variant='outline' onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>Anterior</Button>
+            {Array.from({ length: totalPages }).map((_, i) => {
+              const pageNumber = i + 1;
+              const isActive = pageNumber === page;
+              return (
+                <Button
+                  key={pageNumber}
+                  variant={isActive ? 'default' : 'ghost'}
+                  onClick={() => setPage(pageNumber)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={isActive ? 'bg-slate-900 text-white dark:bg-white dark:text-black' : ''}
+                >
+                  {pageNumber}
+                </Button>
+              );
+            })}
+            <Button variant='outline' onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Siguiente</Button>
           </div>  )
           }
         </div>
