@@ -28,6 +28,31 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
     setUpdatedRecipes(deduplicated);
   }, [recipes]);
 
+
+  // Helper: obtener tiempo total mostrando varios aliases o sumando etapas
+  const getTotalTime = (r) => {
+    if (!r) return null;
+    const candidates = [r.tiempo, r.tiempo_minutos, r.tiempoEstimado, r.time, r.tiempo_total];
+    for (const v of candidates) {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    if (Array.isArray(r.procesos) && r.procesos.length > 0) {
+      const sum = r.procesos.reduce((s, p) => s + (Number(p?.tiempoEstimado ?? p?.tiempo_minutos ?? p?.tiempo) || 0), 0);
+      if (sum > 0) return sum;
+    }
+    return null;
+  };
+
+  // Helper: resumen corto de la descripción con puntos suspensivos
+  const shortDescription = (r, max = 120) => {
+    if (!r) return '';
+    const raw = r.descripcion_receta ?? r.descripcion ?? r.detalle_montaje ?? r.montaje ?? r.argumentacionComercial ?? '';
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    if (s.length <= max) return s;
+    return s.slice(0, max).trim() + '...';
+  };
   // Validar si un ID es local (temporal, sin guardar a backend)
   const isLocalRecipeId = (recipeId) => {
     // IDs locales son timestamps (números > 1000000000000, ~13 dígitos)
@@ -243,7 +268,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <CardTitle 
                       className="text-2xl line-clamp-2 leading-tight cursor-pointer hover:text-primary transition-colors duration-300 ease-in-out"
-                      onClick={() => onSelectRecipe(recipe.id || recipe.id_receta)}
+                      onClick={() => onSelectRecipe(recipe.id_receta || recipe.id)}
                     >
                       {recipe.nombre || recipe.nombre_receta}
                     </CardTitle>
@@ -253,18 +278,18 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                  <p className="text-lg text-slate-600 line-clamp-2 leading-relaxed dark:text-slate-300 transition-colors duration-300 ease-in-out">
-                    {recipe.argumentacionComercial || 'Sin descripción'}
+                  <p className="text-lg text-slate-600 leading-relaxed dark:text-slate-300 transition-colors duration-300 ease-in-out">
+                    {shortDescription(recipe) || 'Sin descripción'}
                   </p>
                   
                   <div className="flex items-center gap-6 text-base text-slate-600">
                     <div className="flex items-center gap-2">
                       <Clock className="w-5 h-5 dark:text-slate-200 transition-colors duration-300 ease-in-out" />
-                      <span className="text-lg dark:text-slate-200 transition-colors duration-300 ease-in-out">{recipe.tiempo} min</span>
+                      <span className="text-lg dark:text-slate-200 transition-colors duration-300 ease-in-out">{getTotalTime(recipe) ? `${getTotalTime(recipe)} min` : 'Sin tiempo'}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Users className="w-5 h-5 dark:text-slate-200 transition-colors duration-300 ease-in-out" />
-                      <span className="text-lg dark:text-slate-200 transition-colors duration-300 ease-in-out">{recipe.porcion} porción</span>
+                      <span className="text-lg dark:text-slate-200 transition-colors duration-300 ease-in-out">{(recipe.porcion ?? recipe.porciones ?? recipe.rendimiento ?? recipe.servings ?? 0)} porción{(recipe.porcion ?? recipe.porciones ?? recipe.rendimiento ?? recipe.servings ?? 0) > 1 ? 'es' : ''}</span>
                     </div>
                   </div>
 
@@ -280,7 +305,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   <div className="flex gap-3 mt-4 pt-4 border-t">
                     <Button 
                       className="flex-1 text-lg py-5 hover:bg-slate-100 hover:text-black hover:border-black dark:hover:bg-black dark:hover:text-white dark:hover:border-white transition-colors duration-300 ease-in-out"
-                      onClick={() => onSelectRecipe(recipe.id || recipe.id_receta)}
+                      onClick={() => onSelectRecipe(recipe.id_receta || recipe.id)}
                     >
                       Ver Detalles
                     </Button>

@@ -18,7 +18,7 @@ export function EditRecipeModal({ recipe, isOpen, onClose, onSave }) {
   const [formData, setFormData] = useState({
     nombre: recipe?.nombre || recipe?.nombre_receta || '',
     codigo: recipe?.codigo || recipe?.codigo_receta || '',
-    categoria: recipe?.categoria || '',
+    categoria: recipe?.categoria ?? recipe?.categoria_receta ?? recipe?.categoria ?? '',
     tiempo: recipe?.tiempo || 0,
     porcion: recipe?.porcion || 1,
     rendimiento: recipe?.rendimiento || '',

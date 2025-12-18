@@ -57,10 +57,11 @@ export function NewRecipePage({ onCancel, onSave, user }) {
   const [imagenFile, setImagenFile] = useState(null);
 
   const [porcion, setPorcion] = useState(1);
+  const [descripcionReceta, setDescripcionReceta] = useState('');
 
 
   const [tiempo, setTiempo] = useState(0);
-  const [tareaInicio, setTareaInicio] = useState('');
+  
   const [montaje, setMontaje] = useState('');
 
   const [touched, setTouched] = useState({});
@@ -91,7 +92,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
         if (!Number.isFinite(n) || n < 0) return 'Debe ser un número >= 0';
         return '';
       }
-      case 'tareaInicio':
       case 'montaje':
         return value !== undefined && value !== null && String(value).trim() === ''
           ? 'No deje solo espacios'
@@ -603,7 +603,7 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       return;
     }
 
-    const allFields = ['codigo', 'nombre', 'categoria', 'tiempo', 'tareaInicio', 'montaje'];
+    const allFields = ['codigo', 'nombre', 'categoria', 'tiempo', 'montaje'];
     const newTouched = {};
     allFields.forEach(f => (newTouched[f] = true));
     setTouched(newTouched);
@@ -614,7 +614,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       if (!nombre) newErrors.nombre = 'El nombre es obligatorio';
       if (!categoria) newErrors.categoria = 'La categoría es obligatoria';
       if (!tiempo) newErrors.tiempo = 'El tiempo es obligatorio';
-      if (!tareaInicio) newErrors.tareaInicio = 'La tarea de inicio es obligatoria';
       if (!montaje.trim()) newErrors.montaje = 'Debes ingresar el montaje final';
 
       if (!ingredientesCategorias.some(cat => cat.ingredientes.length > 0))
@@ -632,7 +631,10 @@ export function NewRecipePage({ onCancel, onSave, user }) {
 
       setErrors(newErrors);
       if (Object.keys(newErrors).length > 0) {
-        toast.error('No se ha podido guardar la receta. Faltan campos obligatorios');
+        const messages = Object.values(newErrors).filter(Boolean);
+        const short = messages.join(' · ');
+        // Mostrar detalles de los campos faltantes
+        toast.error(short || 'No se ha podido guardar la receta. Faltan campos obligatorios');
         return;
       }
     } else {
@@ -655,9 +657,11 @@ export function NewRecipePage({ onCancel, onSave, user }) {
       categoria: categoria || 'Sin categoría',
       aporte: 0,
       porcion: Number(porcion) || 1,
+      porciones: Number(porcion) || 1,
+      descripcion_receta: descripcionReceta || montaje || '',
       tiempo: Number(tiempo) || 0,
       rendimiento: Number(porcion) || 1,
-      tareaInicio: tareaInicio || '',
+      
       ingredientes: ingredientesFinal,
       procesos: procesos.map(p => ({
         etapa: String(p.etapa || '').trim().toUpperCase(),
@@ -794,8 +798,8 @@ export function NewRecipePage({ onCancel, onSave, user }) {
             new Paragraph(''),
             tableMeta,
             new Paragraph(''),
-            new Paragraph({ children: [new TextRun({ text: 'Tarea de Inicio', bold: true })] }),
-            new Paragraph(tareaInicio || ''),
+            new Paragraph({ children: [new TextRun({ text: 'Descripción', bold: true })] }),
+            new Paragraph(descripcionReceta || ''),
             new Paragraph(''),
             new Paragraph({ children: [new TextRun({ text: 'Ingredientes', bold: true })] }),
             ...ingredientesTables,
@@ -914,22 +918,15 @@ export function NewRecipePage({ onCancel, onSave, user }) {
               />
             </div>
 
-            <div>
-              {/* Gramaje por porción removed */}
-            </div>
-
             <div className="col-span-3">
               <label className="block mb-1">Descripción</label>
               <Textarea
                 rows={3}
-                value={tareaInicio}
-                onChange={e => handleChange('tareaInicio', e.target.value, setTareaInicio)}
-                onBlur={e => handleBlur('tareaInicio', e.target.value)}
+                value={descripcionReceta}
+                onChange={e => setDescripcionReceta(e.target.value)}
+                placeholder="Descripción breve de la receta"
                 className={inputClass}
               />
-              {touched.tareaInicio && errors.tareaInicio && (
-                <span className="text-red-500 text-sm">{errors.tareaInicio}</span>
-              )}
             </div>
 
             <div className="col-span-2">
@@ -1255,15 +1252,13 @@ export function NewRecipePage({ onCancel, onSave, user }) {
                                 inputMode="numeric"
                                 pattern="[0-9]*"
                                 min={0}
-                                value={iu.tiempoCoccion || 0}
+                                value={Number(iu.tiempoCoccion) || 0}
                                 onChange={e => updateIngredienteEtapa(pi, ii, 'tiempoCoccion', parseInt(e.target.value || '0', 10))}
                                 max={p.tiempoEstimado}
-                                step={1}
-                                inputMode="numeric"
-                                pattern="\\d*"
                                 onBlur={e => {
                                   const v = parseInt(e.target.value || '0', 10);
-                                  const clamped = Math.min(v, p.tiempoEstimado || 0);
+                                  const maxAllowed = (p && p.tiempoEstimado != null && p.tiempoEstimado !== '') ? Number(p.tiempoEstimado) : Number.POSITIVE_INFINITY;
+                                  const clamped = Math.min(v, maxAllowed);
                                   if (v !== clamped) updateIngredienteEtapa(pi, ii, 'tiempoCoccion', clamped);
                                 }}
                                 disabled={!!iu.saved || !!p.saved}

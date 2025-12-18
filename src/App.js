@@ -175,6 +175,9 @@ export default function App() {
       obj.ingredientes = item.ingredientes ?? item.receta_ingredientes ?? obj.ingredientes ?? [];
       obj.procesos = item.etapas ?? item.receta_etapas ?? item.procesos ?? obj.procesos ?? [];
       obj.tecnicas = item.tecnicas ?? item.tecnica ?? obj.tecnicas ?? [];
+      // Asegurar que tanto `id` como `id_receta` estén disponibles en el objeto
+      if (!obj.id && obj.id_receta) obj.id = obj.id_receta;
+      if (!obj.id_receta && obj.id) obj.id_receta = obj.id;
       return obj;
     };
 
