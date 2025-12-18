@@ -15,6 +15,14 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
   const [deletingRecipe, setDeletingRecipe] = useState(null);
   const [updatedRecipes, setUpdatedRecipes] = useState(recipes);
 
+  // Resolver de forma robusta el identificador de una receta dada (varios aliases posibles)
+  const resolveRecipeId = (r) => {
+    if (!r) return null;
+    return (
+      r.id_receta ?? r.id ?? r.receta?.id_receta ?? r.receta?.id ?? r.codigo ?? r.codigo_receta ?? null
+    );
+  };
+
   // Sincronizar quando las recetas del padre cambian
   React.useEffect(() => {
     // Deduplicar recetas por id_receta para evitar keys duplicadas
@@ -257,8 +265,8 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
 
             <div className="grid grid-cols-2 gap-8">
             {pageRecipes.map((recipe) => {
-              // Usar id_receta como key principal (es el ID en backend)
-              const recipeKey = recipe.id_receta || recipe.id;
+              // Resolver ID robustamente y usarlo como key
+              const recipeKey = resolveRecipeId(recipe) || (recipe.id_receta || recipe.id);
               return (
               <Card 
                 key={recipeKey}
@@ -268,7 +276,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <CardTitle 
                       className="text-2xl line-clamp-2 leading-tight cursor-pointer hover:text-primary transition-colors duration-300 ease-in-out"
-                      onClick={() => onSelectRecipe(recipe.id_receta || recipe.id)}
+                      onClick={() => onSelectRecipe(resolveRecipeId(recipe))}
                     >
                       {recipe.nombre || recipe.nombre_receta}
                     </CardTitle>
@@ -306,7 +314,7 @@ export function Dashboard({ user, recipes, onLogout, onSelectRecipe, onStartNewR
                   <div className="flex gap-3 mt-4 pt-4 border-t">
                     <Button 
                       className="flex-1 text-lg py-5 hover:bg-slate-100 hover:text-black hover:border-black dark:hover:bg-black dark:hover:text-white dark:hover:border-white transition-colors duration-300 ease-in-out"
-                      onClick={() => onSelectRecipe(recipe.id_receta || recipe.id)}
+                      onClick={() => onSelectRecipe(resolveRecipeId(recipe))}
                     >
                       Ver Detalles
                     </Button>
