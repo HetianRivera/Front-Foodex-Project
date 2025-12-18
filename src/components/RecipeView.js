@@ -16,7 +16,7 @@ import { DashboardHeader } from './DashboardHeader';
 import { DashboardFooter } from './DashboardFooter';
 import { useEffect, useState } from 'react';
 import { getFullRecipe } from '../api/recipes';
-import { FullScreenLoader } from './FullScreenLoader';
+import { FullScreenLoader } from './FullScreenLoaderCargando';
 import { toast } from 'sonner';
 import { api } from '../api/client';
 
@@ -243,7 +243,7 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
       {/* Content - Optimizado para tablet */}
       <div className="container mx-auto max-w-6xl p-6">
         <Tabs defaultValue="proceso" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 h-auto gap-2 bg-slate-200 dark:bg-slate-800 p-2 transition-colors duration-500">
+          <TabsList className="grid w-full grid-cols-4 h-auto gap-2 bg-slate-200 dark:bg-slate-800 p-2 transition-colors duration-500">
             <TabsTrigger 
               value="proceso" 
               className="text-lg py-5 text-slate-900 dark:text-slate-100 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
@@ -264,13 +264,6 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
             >
               <Package className="w-6 h-6 mr-2" />
               Ingredientes
-            </TabsTrigger>
-            <TabsTrigger 
-              value="tecnicas" 
-              className="text-lg py-5 text-slate-900 dark:text-slate-100 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
-            >
-              <AlertTriangle className="w-6 h-6 mr-2" />
-              Técnicas
             </TabsTrigger>
             <TabsTrigger 
               value="montaje" 
@@ -448,43 +441,6 @@ export function RecipeView({ recipeId, user, onBack, onLogout, recipes }) {
               )
             ) : (
               <div className="text-slate-600 dark:text-slate-300">No hay ingredientes registrados</div>
-            )}
-          </TabsContent>
-
-          {/* Técnicas Tab con estructura combinada (nombre + descripción) */}
-          <TabsContent value="tecnicas" className="space-y-6">
-            {Array.isArray(recipe.tecnicas) && recipe.tecnicas.length > 0 ? (
-              recipe.tecnicas.map((t, idx) => (
-                <Card 
-                  key={idx} 
-                  className="border-l-8 border-l-blue-500 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500"
-                >
-                  <CardHeader className="bg-blue-50 dark:bg-blue-950/25 pb-6 transition-colors duration-500">
-                    <CardTitle className="text-3xl flex items-center gap-4">
-                      <Badge className="text-2xl px-5 py-2">Técnica {idx+1}</Badge>
-                      <span>{t.nombre}</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-6 pb-6 space-y-6">
-                    <div className="bg-white dark:bg-slate-950 p-6 rounded-xl border-2 border-slate-200 dark:border-slate-700 transition-colors duration-500">
-                      <p className="text-xl leading-relaxed whitespace-pre-wrap">
-                        {t.descripcion}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            ) : (
-              <Card 
-                className="border-l-8 border-l-blue-500 dark:bg-slate-900 dark:border-slate-700 transition-colors duration-500"
-              >
-                <CardHeader className="bg-blue-50 dark:bg-blue-950/25 pb-6 transition-colors duration-500">
-                  <CardTitle className="text-3xl">No hay técnicas registradas</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6 pb-6 text-xl text-slate-600 dark:text-slate-300">
-                  Esta receta aún no tiene técnicas agregadas.
-                </CardContent>
-              </Card>
             )}
           </TabsContent>
 
