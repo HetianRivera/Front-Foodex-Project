@@ -1321,47 +1321,6 @@ export function NewRecipePage({ onCancel, onSave, user }) {
           </CardContent>
         </Card>
 
-        {/* Técnica */}
-        <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
-          <CardHeader className="flex items-center justify-between">
-            <CardTitle className="text-2xl font-semibold">Técnica Base</CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-6">
-            {tecnicas.map((t, idx) => (
-              <div key={idx} className="space-y-4 p-4 rounded border border-slate-200 dark:border-slate-700">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1">Nombre</label>
-                    <Input
-                      value={t.nombre}
-                      onChange={e => updateTecnica(idx, 'nombre', e.target.value)}
-                      className={inputClass}
-                    />
-                  </div>
-
-                  {/* controls removed: no agregar/eliminar técnica */}
-
-                  <div className="col-span-2">
-                    <label className="block mb-1">Descripción</label>
-                    <Textarea
-                      rows={4}
-                      value={t.descripcion}
-                      onChange={e => updateTecnica(idx, 'descripcion', e.target.value)}
-                      className={inputClass}
-                    />
-                    {t.saved && <p className="text-xs text-green-600 mt-1">Registrada</p>}
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {tecnicas.length === 0 && (
-              <p className="text-sm text-slate-500">No hay técnica agregada.</p>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Montaje */}
         <Card className="bg-white dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
           <CardHeader>
