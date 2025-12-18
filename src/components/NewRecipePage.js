@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { DashboardHeader } from './DashboardHeader';
 import { DashboardFooter } from './DashboardFooter';
-import { FullScreenLoader } from './FullScreenLoaderCargando';
+import { FullScreenLoader } from './FullScreenLoader';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
