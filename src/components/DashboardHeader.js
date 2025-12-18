@@ -18,7 +18,7 @@ function InlineLogo() {
   );
 }
 
-export function DashboardHeader({ user, onLogout, children }) {
+export function DashboardHeader({ user, onLogout, children, showWelcome = true }) {
     const [isDark, setIsDark] = useState(() => {
     try {
       return localStorage.getItem("foodex_theme") === "dark";
@@ -67,8 +67,8 @@ export function DashboardHeader({ user, onLogout, children }) {
           </div>
           <div className="flex items-center gap-6">
             <div className="text-right">
-              <p className="text-lg text-slate-300">Bienvenido/a</p>
-              <p className="text-2xl mb-2">{user.name}</p>
+              {showWelcome && <p className="text-lg text-slate-300">Bienvenido/a</p>}
+              <p className="text-2xl mb-2">Nicolás</p>
             </div>
             {onLogout && (
                <Button onClick={onLogout} size="lg" className="p-6 text-lg bg-red-700 hover:bg-red-900 text-white dark:bg-red-800 dark:hover:bg-red-700 transition-colors duration-300 ease-in-out">
